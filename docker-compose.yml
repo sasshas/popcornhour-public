@@ -1,0 +1,50 @@
+# Popcornhour, self-hosted.
+#
+#   1. cp .env.example .env     and fill in the real values (this file is git-ignored)
+#   2. mkdir -p data && chown 99:100 data     (Unraid: nobody:users; skip if data/ already works)
+#   3. docker compose up -d --build
+#
+# Values come from `.env` in two ways: `env_file` passes everything in it to the container, and the
+# ${VAR} references below are filled from the same `.env` (Compose reads it automatically for
+# interpolation). Lines with `:?` are required and stop `docker compose up` with a clear message when
+# missing, so the app can never start with a blank password or a default one.
+
+services:
+  popcornhour:
+    build: .
+    image: popcornhour:latest
+    container_name: popcornhour
+    restart: unless-stopped
+    init: true # proper signal handling / zombie reaping for PID 1
+    user: "99:100" # nobody:users on Unraid
+    ports:
+      - "8080:8080" # host:container. Change the left side if 8080 is taken on the host
+    volumes:
+      - ./data:/data # SQLite database lives here (app.db, app.db-wal, app.db-shm) and backups in data/backups
+    env_file:
+      - .env
+    environment:
+      # --- fixed by the image / volume layout: do not move these without moving the volume ---
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      DB_PATH: "/data/app.db"
+
+      # --- sign-in (single user) ---
+      APP_PASSWORD: "${APP_PASSWORD:?set APP_PASSWORD in .env}" # placeholder: choose a strong password
+      SESSION_SECRET: "${SESSION_SECRET:?set SESSION_SECRET in .env}" # placeholder: 64 random hex chars
+
+      # --- where the app is reached from the browser (Trakt redirect URI + Secure-cookie decision) ---
+      # e.g. http://192.168.1.10:8080 or https://movies.example.com. No trailing slash.
+      PUBLIC_URL: "${PUBLIC_URL:?set PUBLIC_URL in .env}"
+
+      # --- TMDB (required) ---
+      TMDB_API_KEY: "${TMDB_API_KEY:?set TMDB_API_KEY in .env}"
+
+      # --- optional integrations: leave empty to disable ---
+      OMDB_API_KEY: "${OMDB_API_KEY:-}" # IMDb / Rotten Tomatoes / Metascore ratings
+      MDBLIST_API_KEY: "${MDBLIST_API_KEY:-}" # fills in Rotten Tomatoes where OMDb has none
+      TRAKT_CLIENT_ID: "${TRAKT_CLIENT_ID:-}" # Connect Trakt + Import
+      TRAKT_CLIENT_SECRET: "${TRAKT_CLIENT_SECRET:-}"
+      WETRAKR_CLIENT_ID: "${WETRAKR_CLIENT_ID:-}" # Connect WeTrakr + Import
+      WETRAKR_CLIENT_SECRET: "${WETRAKR_CLIENT_SECRET:-}"
+      CRON_SECRET: "${CRON_SECRET:-}" # empty = POST /api/public/hooks/check-new-seasons is disabled (503)

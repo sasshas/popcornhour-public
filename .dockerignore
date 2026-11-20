@@ -1,0 +1,25 @@
+# Keep the build context small and keep secrets out of it.
+node_modules
+.output
+dist
+dist-ssr
+.tanstack
+.nitro
+.vinxi
+
+# Runtime data and secrets: never part of an image
+data
+.env*
+
+# Tooling and VCS
+.git
+.gitignore
+.claude
+.vscode
+.idea
+
+# Docker's own files and logs
+Dockerfile
+docker-compose.yml
+.dockerignore
+*.log

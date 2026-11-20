@@ -1,0 +1,340 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+/* The Inter font, served by the app itself (one file per alphabet covering every weight), not fetched from Google. */
+@import "@fontsource-variable/inter/wght.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-gold: var(--gold);
+  --font-display: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  /* Always dark (see the color-scheme meta in __root.tsx): browsers draw their own scrollbars and controls dark and
+     do not apply their automatic "darken websites" on top. */
+  color-scheme: dark;
+  --radius: 0.875rem;
+  /* Theme hue in OKLCH degrees: 255 = blue (the default). The accent uses it directly and the dark
+     surfaces use a hue 10 degrees along, so the whole palette follows it. The Appearance setting
+     overrides --h on <html> (see src/lib/theme.ts); nothing else needs to change per colour. */
+  --h: 255;
+  --hs: calc(var(--h) + 10);
+  /* Dark, poster-forward palette */
+  --background: oklch(0.16 0.012 var(--hs));
+  --foreground: oklch(0.97 0.005 var(--hs));
+  --surface: oklch(0.20 0.014 var(--hs));
+  --surface-elevated: oklch(0.235 0.018 var(--hs));
+  --card: oklch(0.20 0.014 var(--hs));
+  --card-foreground: oklch(0.97 0.005 var(--hs));
+  --popover: oklch(0.20 0.014 var(--hs));
+  --popover-foreground: oklch(0.97 0.005 var(--hs));
+  --primary: oklch(0.70 0.16 var(--h));
+  --primary-foreground: oklch(0.14 0.02 var(--hs));
+  --secondary: oklch(0.27 0.02 var(--hs));
+  --secondary-foreground: oklch(0.97 0.005 var(--hs));
+  --muted: oklch(0.24 0.015 var(--hs));
+  --muted-foreground: oklch(0.68 0.02 var(--hs));
+  --accent: oklch(0.30 0.05 var(--hs));
+  --accent-foreground: oklch(0.97 0.005 var(--hs));
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 var(--hs));
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.70 0.16 var(--h));
+  --gold: oklch(0.82 0.14 85);
+  /* Lightness of the tint behind the see-through bars (phone top bar, bottom menu, Calendar bar): the page colour. */
+  --bar-l: 0.16;
+}
+
+/* Theme "Dark" (Settings -> Appearance -> Theme; the default above is "AMOLED"). A softer dark grey (about #222)
+   instead of near black, with lighter cards and pills and stronger edges so they stand apart from the page. Only
+   a whisper of the accent hue, so it reads as grey. */
+[data-theme="dark"] {
+  --background: oklch(0.25 0.006 var(--hs));
+  --surface: oklch(0.315 0.008 var(--hs));
+  --surface-elevated: oklch(0.355 0.009 var(--hs));
+  --card: oklch(0.30 0.008 var(--hs));
+  --popover: oklch(0.32 0.008 var(--hs));
+  --secondary: oklch(0.38 0.01 var(--hs));
+  --muted: oklch(0.34 0.008 var(--hs));
+  --muted-foreground: oklch(0.78 0.012 var(--hs));
+  --accent: oklch(0.40 0.035 var(--hs));
+  --border: oklch(1 0 0 / 24%);
+  --input: oklch(1 0 0 / 26%);
+  --bar-l: 0.25;
+}
+/* Dark with Liquid glass: glass swaps in its own fainter see-through fill and edge (below), which on grey made
+   the pills almost vanish. Two attributes, so this wins over the glass block whatever the order. */
+[data-glass][data-theme="dark"] {
+  --border: oklch(1 0 0 / 26%);
+  --input: oklch(1 0 0 / 26%);
+  --surface: oklch(1 0 0 / 10%);
+  --surface-elevated: oklch(1 0 0 / 14%);
+}
+
+@layer base {
+  html, body { background-color: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+  * { border-color: var(--color-border); }
+  body { min-height: 100vh; }
+}
+
+/* Phone: the window itself never scrolls (the app scrolls inside .app-root, see AppShell), so the browser's
+   toolbar never hides and the floating bars never jump. Unlayered so it beats the base-layer body rule. */
+@media (max-width: 767px) {
+  html, body {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  /* A frosted, lighter-than-the-page panel (used by the Links sheet): translucent grey, blurred backdrop. */
+  .glass-sheet {
+    background-color: oklch(0.32 0.012 var(--hs) / 0.78);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid oklch(1 0 0 / 0.12);
+  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { scrollbar-width: none; }
+  .text-balance { text-wrap: balance; }
+  .mask-fade-r { mask-image: linear-gradient(to right, black 90%, transparent); }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Liquid glass (optional, <html data-glass>, switched in Settings -> Appearance; see src/lib/theme.ts).
+   Frosted translucent panels over a soft glow of the accent colour. It only restyles the app's
+   "chrome" (menu, bars, floating menus, dialogs, pills and cards) and never the posters, so the
+   expensive backdrop blur stays on a handful of elements and scrolling stays smooth on a phone.
+   Unlayered on purpose: it wins over the Tailwind utilities without needing !important.
+   --------------------------------------------------------------------------------------------- */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-glass] {
+    --border: oklch(1 0 0 / 16%);
+    --input: oklch(1 0 0 / 16%);
+    --surface: oklch(1 0 0 / 7%);
+    --surface-elevated: oklch(1 0 0 / 11%);
+    --glass-blur: blur(22px) saturate(180%);
+    --glass-sheen: linear-gradient(135deg, oklch(1 0 0 / 0.16), oklch(1 0 0 / 0.03) 45%, oklch(1 0 0 / 0.08));
+    --glass-edge: inset 0 1px 0 oklch(1 0 0 / 0.30), inset 0 -1px 0 oklch(1 0 0 / 0.05), 0 12px 32px oklch(0 0 0 / 0.30);
+  }
+
+  /* The glow the glass blurs. Fixed (not background-attachment) so iOS Safari keeps it still. */
+  [data-glass] body {
+    background-color: transparent;
+  }
+  [data-glass] body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(48rem 36rem at 8% -8%, oklch(0.50 0.17 var(--h) / 0.50), transparent 65%),
+      radial-gradient(42rem 34rem at 96% 6%, oklch(0.46 0.15 calc(var(--h) + 55) / 0.38), transparent 62%),
+      radial-gradient(52rem 40rem at 60% 108%, oklch(0.42 0.14 calc(var(--h) - 55) / 0.38), transparent 62%);
+  }
+  [data-glass] .app-root {
+    background: transparent;
+  }
+
+  /* Menu, top and bottom bars */
+  [data-glass] :is(aside, header.fixed, nav.fixed) {
+    background-color: oklch(1 0 0 / 0.05);
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  /* The phone's top bar sits over scrolling posters, so it gets a darker tint to keep its text readable. (The
+     floating bottom bar is a .float-glass pill instead.) */
+  [data-glass] header.fixed {
+    background-color: oklch(var(--bar-l) 0.02 var(--hs) / 0.55);
+  }
+  /* ...and clearer once the page has scrolled (the bar slides back in as see-through glass) */
+  [data-glass] header.fixed[data-scrolled] {
+    background-color: oklch(var(--bar-l) 0.02 var(--hs) / 0.28);
+  }
+  /* The floating bottom bar sits over posters too, so it is tinted darker still, to keep the icons and the
+     tab name easy to read. */
+  [data-glass] nav.fixed {
+    background-color: oklch(var(--bar-l) 0.02 var(--hs) / 0.82);
+  }
+
+  /* Floating panels: dropdown menus, popovers, selects, dialogs */
+  [data-glass] :is(.bg-popover, [role="dialog"]) {
+    background-color: oklch(0.30 0.04 var(--hs) / 0.50);
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: blur(28px) saturate(190%);
+    backdrop-filter: blur(28px) saturate(190%);
+    box-shadow: var(--glass-edge);
+    border-color: oklch(1 0 0 / 0.20);
+  }
+
+  /* Pills, toolbar buttons and settings cards. (.no-glass opts an element out: the streaming-logo circles on posters
+     are round and surface-coloured too, and must not each get a backdrop blur.) */
+  [data-glass] :is([class*="bg-surface"][class*="rounded-full"]:not(.no-glass), section[class*="bg-surface"]) {
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+  }
+  [data-glass] section[class*="bg-surface"] {
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 10px 28px oklch(0 0 0 / 0.22);
+  }
+
+  /* Buttons that float over a hero image (back, search, Watch trailer): clear, see-through glass. Much more
+     transparent than the normal dark pill, with a bright edge and sheen; the backdrop is darkened a touch
+     so the white icon and text stay readable over a bright picture. */
+  [data-glass] .float-glass {
+    background-color: oklch(1 0 0 / 0.05);
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: blur(14px) saturate(200%) brightness(0.74);
+    backdrop-filter: blur(14px) saturate(200%) brightness(0.74);
+    border-color: oklch(1 0 0 / 0.38);
+    box-shadow:
+      0 0 0 1px oklch(1 0 0 / 0.38),
+      inset 0 1px 0 oklch(1 0 0 / 0.55),
+      inset 0 -1px 0 oklch(1 0 0 / 0.10),
+      0 8px 22px oklch(0 0 0 / 0.30);
+    text-shadow: 0 1px 2px oklch(0 0 0 / 0.45);
+  }
+  /* A faint shadow under the icon, so it still shows on a very white picture */
+  [data-glass] .float-glass svg {
+    filter: drop-shadow(0 1px 1.5px oklch(0 0 0 / 0.45));
+  }
+}
+
+/* A page's own controls bar on a phone (the Calendar). At the top of the page it is see-through with no edge, so it
+   blends into the page; once the page has scrolled (it slides back in over the content) it becomes tinted glass. */
+.page-bar {
+  background-color: transparent;
+}
+.page-bar[data-scrolled] {
+  background-color: oklch(var(--bar-l) 0.012 var(--hs) / 0.78);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+[data-glass] .page-bar[data-scrolled] {
+  background-color: oklch(var(--bar-l) 0.02 var(--hs) / 0.40);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Switching between two tabs that sit side by side (Library: Movies / TV): the page you leave slides out one side as the
+   new one slides in from the other, like a carousel, so there is never an empty moment between them. The incoming one
+   fills "backwards" only and the outgoing one is removed when it finishes, so nothing is left transformed afterwards. */
+@keyframes cx-slide-in-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes cx-slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes cx-slide-out-left { from { transform: none; } to { transform: translateX(-100%); } }
+@keyframes cx-slide-out-right { from { transform: none; } to { transform: translateX(100%); } }
+.cx-slide-in-right { animation: cx-slide-in-right 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards; will-change: transform; backface-visibility: hidden; }
+.cx-slide-in-left { animation: cx-slide-in-left 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards; will-change: transform; backface-visibility: hidden; }
+.cx-slide-out-left { animation: cx-slide-out-left 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; will-change: transform; backface-visibility: hidden; }
+.cx-slide-out-right { animation: cx-slide-out-right 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards; will-change: transform; backface-visibility: hidden; }
+/* Changing page (the router's view transitions, see router.tsx): the old page fades into the new one, quickly, and
+   the poster you tapped moves and grows into the poster of the page it opens (both carry the name hero-poster, see
+   src/lib/peek.ts). Browsers without view transitions ignore all of this and change page at once. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+}
+/* Switching tabs with the phone's bottom bar (the "tab" transition type, set on its links in AppShell). Instead of
+   two busy pages showing through each other, the old page fades out quickly and the new one fades in while
+   settling from very slightly smaller ("fade through"). The bar itself is lifted out of the fade and shown live, so
+   its highlighted pill can glide across to the new tab (a CSS transition in AppShell) and the bar never flickers.
+   Only for these switches: the bar keeps no name otherwise, so it fades with the page and stays under the
+   Calendar's dimmed backdrop as before. Browsers without transition types get the usual cross-fade. */
+:root:active-view-transition-type(tab) .bottom-nav {
+  view-transition-name: bottom-nav;
+  /* A lifted-out element is drawn on its own, with nothing behind it to blur, and the blur then showed as a
+     square-cornered box around the bar. The bar is 80-90% solid, so the blur is not missed for this moment. */
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root:active-view-transition-type(tab)::view-transition-old(root) {
+  animation: cx-tab-out 0.09s linear both;
+}
+:root:active-view-transition-type(tab)::view-transition-new(root) {
+  animation: cx-tab-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+::view-transition-group(bottom-nav),
+::view-transition-new(bottom-nav) {
+  animation: none;
+}
+::view-transition-old(bottom-nav) {
+  animation: none;
+  opacity: 0;
+}
+@keyframes cx-tab-out { to { opacity: 0; } }
+@keyframes cx-tab-in { from { opacity: 0; transform: scale(0.985); } }
+/* The star just picked in a rating (RatingPicker): a quick swell and settle. */
+@keyframes cx-star-pop { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
+::view-transition-group(hero-poster) {
+  /* Always drawn on top of whatever else is moving. Without this the Calendar's details panel, being new to the
+     page, was drawn over the poster flying into it, so the poster only appeared once it had landed. */
+  z-index: 1;
+  animation-duration: 0.34s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The two pictures are the same poster at different sizes: stretch both to the moving box so they stay lined up. */
+/* The Calendar's movie details panel: slides up from the bottom of the screen when a poster is tapped, and back
+   down when closed (FloatingSheet with `slides`). The tapped poster flies into the panel as "hero-poster". */
+@keyframes sheet-up {
+  from { transform: translateY(110%); }
+}
+@keyframes sheet-down {
+  to { transform: translateY(110%); }
+}
+::view-transition-new(sheet):only-child {
+  animation: sheet-up 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+::view-transition-old(sheet):only-child {
+  animation: sheet-down 0.26s cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+::view-transition-old(hero-poster),
+::view-transition-new(hero-poster) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 0.34s;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-slide-in-right, .cx-slide-in-left, .cx-slide-out-left, .cx-slide-out-right { animation-duration: 0.01s; }
+}
