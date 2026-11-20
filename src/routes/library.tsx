@@ -11,10 +11,9 @@ import {
   Type,
   Star,
   Film,
-  Clapperboard,
-  MonitorPlay,
   Tv as TvIcon,
   RadioTower,
+  MonitorPlay,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,6 +38,15 @@ import { StickyControls } from "@/components/layout/StickyControls";
 import { markHeroPoster, rememberPeek } from "@/lib/peek";
 import { LoadMore } from "@/components/media/LoadMore";
 import { isFreshVisit } from "@/lib/nav-action";
+import {
+  compareUpcoming,
+  firstPillDateSort,
+  isUpcomingMovie,
+  upcomingBadge,
+  upcomingDateSort,
+  upcomingDates,
+} from "@/lib/upcoming";
+import { ReleaseDateBadge, type ReleaseKind } from "@/components/media/ReleaseDateBadge";
 
 /** Posters drawn at a time in a big view (see `more` in the page). About ten rows on a phone. */
 const PAGE_SIZE = 30;
@@ -90,18 +98,6 @@ function readGenreFilter(v: unknown): GenreFilter | null {
   return { movie: list((v as GenreFilter).movie), tv: list((v as GenreFilter).tv) };
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/**
- * "2 Apr" for a date this year, "2 Apr 2027" otherwise. Release dates arrive as midnight UTC, so the day is read in
- * UTC: reading it in local time would show the day before in timezones behind UTC.
- */
-function shortDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  const year = d.getUTCFullYear();
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${year === new Date().getFullYear() ? "" : ` ${year}`}`;
-}
-
 /**
  * One poster in the grid. Memoised: it is only drawn again when something about this poster changes, not every time
  * the page around it does (another page of posters being added used to re-run every poster already on the page).
@@ -119,7 +115,7 @@ const PosterTile = memo(function PosterTile({
   score: number | null;
   /** Shown as a small date badge (movies Upcoming only): the digital date once there is one, else the cinema date. */
   releaseDate: string | null;
-  releaseKind: "digital" | "cinema";
+  releaseKind: ReleaseKind;
   /** Load the picture straight away instead of when it nears the screen. */
   eager: boolean;
 }) {
@@ -153,23 +149,7 @@ const PosterTile = memo(function PosterTile({
           mediaType={it.media_type}
           tmdbId={it.tmdb_id}
           score={score}
-          bottomLeft={
-            releaseDate && (
-              // A small dark pill in the bottom-left corner, just above the streaming logos when the poster has any.
-              <div
-                className="flex items-center gap-1 rounded-full bg-black/70 py-0.5 pl-1.5 pr-2 text-[11px] font-semibold leading-4 text-white ring-1 ring-white/15 whitespace-nowrap"
-                title={`${releaseKind === "digital" ? "Digital" : "Cinema"} release ${shortDate(releaseDate)}`}
-              >
-                {releaseKind === "digital" ? (
-                  <MonitorPlay className="size-3 text-[var(--gold)]" aria-hidden />
-                ) : (
-                  <Clapperboard className="size-3 text-sky-300" aria-hidden />
-                )}
-                <span className="sr-only">{releaseKind === "digital" ? "Digital" : "Cinema"} release </span>
-                {shortDate(releaseDate)}
-              </div>
-            )
-          }
+          bottomLeft={releaseDate && <ReleaseDateBadge date={releaseDate} kind={releaseKind} />}
         />
       </div>
       {showTitles && <p className="mt-2 text-sm font-medium line-clamp-1">{it.title}</p>}
@@ -200,12 +180,17 @@ const TV_FILTERS = [
 // "rt" is the Rotten Tomatoes critics' score (the % on the posters). It replaced "Personal rating"; a pill whose
 // remembered sort was that falls back to its default.
 // "aired" (Recently aired) orders shows by when their latest episode went out; TV only.
-type SortKey = "added" | "name" | "rt" | "release" | "watched" | "aired";
+// On the movies Unwatched and Upcoming pills only one date sort is offered, and Filters > "Released means" (Anywhere = on)
+// picks it (src/lib/upcoming.ts): off, both go by "streaming" (Streaming date); on, Upcoming goes by "cinema" (Cinema
+// date) and Unwatched by "release" (Release date). The other pills keep Release date.
+type SortKey = "added" | "name" | "rt" | "release" | "streaming" | "cinema" | "watched" | "aired";
 const SORTS: { value: SortKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "added", label: "Date added", icon: Calendar },
   { value: "name", label: "Name", icon: Type },
   { value: "rt", label: "Rotten Tomatoes", icon: Star },
   { value: "release", label: "Release date", icon: Calendar },
+  { value: "streaming", label: "Streaming date", icon: MonitorPlay },
+  { value: "cinema", label: "Release date", icon: Calendar }, // labelled Release date: straight-to-streaming movies are in it too
   { value: "watched", label: "Last watched", icon: CalendarCheck },
   { value: "aired", label: "Recently aired", icon: RadioTower },
 ];
@@ -224,17 +209,22 @@ function hasLastWatched(kind: "movie" | "tv", filter: string): boolean {
 }
 
 /** Sort used for a pill that has no remembered choice. */
-function defaultSortFor(kind: "movie" | "tv", filter: string): SortChoice {
+function defaultSortFor(kind: "movie" | "tv", filter: string, cinemaCounts: boolean): SortChoice {
   if (kind === "tv") {
     return filter === "watching" || filter === "completed"
       ? { sortKey: "watched", sortDir: "desc" } // most recently watched show first
       : { sortKey: "added", sortDir: "desc" };
   }
+  // Soonest first: to watch at home (filter off) or to open in cinemas (on).
+  if (filter === "upcoming") return { sortKey: upcomingDateSort(cinemaCounts), sortDir: "asc" };
+  // Newest first: to arrive at home (off) or in cinemas (on).
+  if (filter === "unwatched") return { sortKey: firstPillDateSort(cinemaCounts), sortDir: "desc" };
   return { sortKey: "release", sortDir: "desc" }; // newest release first
 }
 
 // Bump to discard everyone's saved per-pill sorts once (they then show the defaults).
-const SORT_PREFS_VERSION = 6;
+// 7: Streaming date became the Unwatched default, so a sort saved there under 6 is dropped once (the rest are kept).
+const SORT_PREFS_VERSION = 7;
 
 function LibraryPage() {
   const { user, loading } = useAuth();
@@ -281,7 +271,7 @@ function LibraryPage() {
   // Each pill remembers its own sort. Key is `${kind}:${filter}` (e.g. "movie:watched", "tv:watching").
   // Only sorts the user actually picked are stored; a pill with no entry shows its default.
   const [sortMap, setSortMap] = useState<Record<string, SortChoice>>((lastView?.sortMap as Record<string, SortChoice>) ?? {});
-  // Filter > "Include movies in cinemas": a movie that has opened in cinemas moves from Upcoming to Unwatched.
+  // Filters > "Released means" (Anywhere = on): a movie that has opened in cinemas moves from Upcoming to Unwatched.
   const [cinemaCounts, setCinemaCounts] = useState<boolean>(lastView?.cinemaCounts ?? false);
   const [genreFilter, setGenreFilter] = useState<GenreFilter>(lastView?.genreFilter ?? NO_GENRES);
   const pickedGenres = genreFilter[kind];
@@ -293,17 +283,29 @@ function LibraryPage() {
   const [prefsLoaded, setPrefsLoaded] = useState(lastView !== null);
   const currentFilter = kind === "movie" ? movieFilter : tvFilter;
   const currentPillKey = `${kind}:${currentFilter}`;
-  // Filters > "Include movies in cinemas" is offered on the movies Unwatched and Upcoming pills only.
+  // Filters > "Released means" (Anywhere = on) is offered on the movies Unwatched and Upcoming pills only.
   const cinemaOption = kind === "movie" && (movieFilter === "unwatched" || movieFilter === "upcoming");
+  // On the movies Upcoming pill, Streaming date and the cinema sort (shown as "Release date") take the place of the usual Release date.
+  const upcomingPill = kind === "movie" && movieFilter === "upcoming";
+  const unwatchedPill = kind === "movie" && movieFilter === "unwatched";
   const availableSorts = SORTS.filter(
-    (s) => (s.value !== "watched" || hasLastWatched(kind, currentFilter)) && (s.value !== "aired" || kind === "tv"),
+    (s) =>
+      (s.value !== "watched" || hasLastWatched(kind, currentFilter)) &&
+      (s.value !== "aired" || kind === "tv") &&
+      (s.value !== "release" && s.value !== "streaming" && s.value !== "cinema"
+        ? true
+        : upcomingPill
+          ? s.value === upcomingDateSort(cinemaCounts)
+          : unwatchedPill
+            ? s.value === firstPillDateSort(cinemaCounts)
+            : s.value === "release"),
   );
   // The sort in effect: this pill's remembered choice (if it is still offered here), else its default.
   const remembered = sortMap[currentPillKey];
   const { sortKey: effectiveSortKey, sortDir } =
     remembered && availableSorts.some((s) => s.value === remembered.sortKey)
       ? remembered
-      : defaultSortFor(kind, currentFilter);
+      : defaultSortFor(kind, currentFilter, cinemaCounts);
   const chooseSort = (patch: Partial<SortChoice>) =>
     setSortMap((m) => ({ ...m, [currentPillKey]: { sortKey: effectiveSortKey, sortDir, ...patch } }));
 
@@ -320,7 +322,11 @@ function LibraryPage() {
         // The TV pill was reset to Watching once at version 4; later versions only reset sorts.
         setTvFilter(p.v >= 4 && TV_FILTERS.some((f) => f.value === p.tvFilter) ? p.tvFilter : "watching");
         // Sorts saved before SORT_PREFS_VERSION included ones nobody chose, so they are dropped once.
-        if (p.v === SORT_PREFS_VERSION && p.sortMap && typeof p.sortMap === "object") setSortMap(p.sortMap);
+        if ((p.v === SORT_PREFS_VERSION || p.v === 6) && p.sortMap && typeof p.sortMap === "object") {
+          const m = { ...p.sortMap };
+          if (p.v === 6) delete m["movie:unwatched"]; // see SORT_PREFS_VERSION
+          setSortMap(m);
+        }
         if (p.cinemaCounts === true) setCinemaCounts(true);
         const genres = readGenreFilter(p.genreFilter);
         if (genres) setGenreFilter(genres);
@@ -388,16 +394,8 @@ function LibraryPage() {
     // A movie is "upcoming" when it cannot be watched at home yet AND it is new. An old movie that simply is not on
     // any US service (a 1997 film, say) is not upcoming: it stays under Unwatched. The library only stores the release
     // year, so "new" means this year or last year, or no date at all (not released yet), or a digital date still ahead.
-    const thisYear = new Date().getFullYear();
-    const isUpcoming = (r: { tmdb_id: number; release_date?: string | null }) => {
-      const a = availMap.get(r.tmdb_id);
-      if (!a || a.available) return false;
-      // Filter > "Include movies in cinemas": a movie that has opened in cinemas counts as out, so it is not upcoming.
-      if (cinemaCounts && a.cinemaDate && Date.parse(a.cinemaDate) <= Date.now()) return false;
-      if (a.digitalDate && Date.parse(a.digitalDate) > Date.now()) return true;
-      const year = parseInt(r.release_date ?? "", 10);
-      return Number.isNaN(year) || year >= thisYear - 1;
-    };
+    const isUpcoming = (r: { tmdb_id: number; release_date?: string | null }) =>
+      isUpcomingMovie(availMap.get(r.tmdb_id), r.release_date, cinemaCounts);
     let rows = (data ?? []).filter((r) => r.media_type === kind);
     if (kind === "movie") {
       switch (movieFilter) {
@@ -456,11 +454,6 @@ function LibraryPage() {
   const getLastAired = useLastAired(showIds, effectiveSortKey === "aired");
 
   const items = useMemo(() => {
-    const upcomingDate = (r: { tmdb_id: number; release_date?: string | null }) => {
-      const a = availMap.get(r.tmdb_id);
-      const d = a?.digitalDate ?? a?.cinemaDate ?? r.release_date ?? "";
-      return /^\d{4}$/.test(d) ? `${d}-12-31` : d;
-    };
     const releaseKey = (r: { tmdb_id: number; media_type: string; release_date?: string | null }) =>
       (r.media_type === "movie" && availMap.get(r.tmdb_id)?.cinemaDate) || r.release_date || "";
     const sorted = [...shownRows].sort((a, b) => {
@@ -495,21 +488,21 @@ function LibraryPage() {
           cmp = ra - rb;
           break;
         }
-        case "release": {
-          if (kind === "movie" && movieFilter === "upcoming") {
-            // Upcoming is ordered by the date on the poster's badge. A movie with only a year goes after the dated
-            // movies of that year, and one with no date at all goes last, whichever direction is chosen.
-            const ka = upcomingDate(a);
-            const kb = upcomingDate(b);
-            if (!ka || !kb) return ka ? -1 : kb ? 1 : 0;
-            cmp = ka.localeCompare(kb);
-          } else {
-            // The library only stores the release year. Where the cinema date is known (movies not watched yet) it is
-            // used instead, so this year's movies are in true date order rather than jumbled within the year.
-            cmp = releaseKey(a).localeCompare(releaseKey(b));
-          }
+        case "streaming":
+        case "cinema":
+          // When it can be watched at home, or when it opens in cinemas (src/lib/upcoming.ts). Titles
+          // without that date go last, whichever direction is chosen, so this returns the final order itself.
+          return compareUpcoming(
+            upcomingDates(availMap.get(a.tmdb_id), a.release_date),
+            upcomingDates(availMap.get(b.tmdb_id), b.release_date),
+            effectiveSortKey,
+            sortDir === "asc" ? 1 : -1,
+          );
+        case "release":
+          // The library only stores the release year. Where the cinema date is known (movies not watched yet) it is
+          // used instead, so this year's movies are in true date order rather than jumbled within the year.
+          cmp = releaseKey(a).localeCompare(releaseKey(b));
           break;
-        }
         case "added":
         default:
           cmp = new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
@@ -553,6 +546,8 @@ function LibraryPage() {
   // The poster grid for a list of items. The first `eagerCount` posters load straight away (while a slide is playing, so
   // the sliding-in grid is never a row of empty boxes).
   const showDates = kind === "movie" && movieFilter === "upcoming";
+  // The poster pill goes by the date Upcoming sorts by (streaming, or cinema with the cinema filter on).
+  const badgeBy = upcomingDateSort(cinemaCounts);
   const renderGrid = (list: typeof items, eagerCount: number) => (
           <div className={`grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-3 md:gap-x-4 ${showTitles ? "gap-y-5 md:gap-y-6" : "gap-y-3 md:gap-y-4"}`}>
             {list.map((it, idx) => (
@@ -561,8 +556,8 @@ function LibraryPage() {
                 it={it}
                 showTitles={showTitles}
                 score={getScore(it.media_type, it.tmdb_id)}
-                releaseDate={showDates ? (availMap.get(it.tmdb_id)?.digitalDate ?? availMap.get(it.tmdb_id)?.cinemaDate ?? null) : null}
-                releaseKind={showDates && availMap.get(it.tmdb_id)?.digitalDate ? "digital" : "cinema"}
+                releaseDate={showDates ? (upcomingBadge(availMap.get(it.tmdb_id), badgeBy)?.date ?? null) : null}
+                releaseKind={upcomingBadge(availMap.get(it.tmdb_id), badgeBy)?.kind ?? "cinema"}
                 eager={idx < eagerCount}
               />
             ))}
@@ -691,16 +686,7 @@ function LibraryPage() {
           <FiltersSheet
             open={filtersOpen}
             onOpenChange={setFiltersOpen}
-            toggle={
-              cinemaOption
-                ? {
-                    label: "Include movies in cinemas",
-                    hint: "Moves them to Unwatched from Upcoming",
-                    checked: cinemaCounts,
-                    onChange: setCinemaCounts,
-                  }
-                : null
-            }
+            releasedMeans={cinemaOption ? { anywhere: cinemaCounts, onChange: setCinemaCounts } : null}
             genres={genreOptions}
             pickedGenres={pickedGenres}
             onToggleGenre={toggleGenre}

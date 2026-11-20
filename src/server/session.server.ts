@@ -3,7 +3,7 @@ import { cookiesSecure, requireEnv } from "./config.server.ts";
 import { USER_ID } from "./db.ts";
 
 export const SESSION_COOKIE = "cinexplore_session";
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 function sign(payload: string): string {
   return createHmac("sha256", requireEnv("SESSION_SECRET")).update(payload).digest("base64url");

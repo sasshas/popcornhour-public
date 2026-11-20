@@ -179,3 +179,11 @@ export function listedItemKeys(userId: string): string[] {
     .all(userId) as { media_type: MediaKind; tmdb_id: number }[];
   return rows.map((r) => `${r.media_type}:${r.tmdb_id}`);
 }
+
+/** Every title on one of the user's lists, as "movie:123" / "tv:456". */
+export function listItemKeys(userId: string, listId: string): string[] {
+  const rows = getDb()
+    .prepare(`SELECT media_type, tmdb_id FROM list_items WHERE user_id = ? AND list_id = ?`)
+    .all(userId, listId) as { media_type: MediaKind; tmdb_id: number }[];
+  return rows.map((r) => `${r.media_type}:${r.tmdb_id}`);
+}

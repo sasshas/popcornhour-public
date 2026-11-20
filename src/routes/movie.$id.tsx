@@ -14,6 +14,8 @@ import { RatingsBar } from "@/components/media/RatingsBar";
 import { WhatPeopleSay } from "@/components/media/WhatPeopleSay";
 import { ParentsGuide } from "@/components/media/ParentsGuide";
 import { DetailBackdrop, DetailPoster, DetailSkeleton } from "@/components/media/DetailHero";
+import { ReleasesDialog, countReleaseCountries, type ReleaseDates } from "@/components/media/ReleasesDialog";
+import { useState } from "react";
 
 const movieQuery = (id: number) =>
   queryOptions({ queryKey: ["movie", id], queryFn: () => getMovie({ data: { id } }), staleTime: 1000 * 60 * 30 });
@@ -83,6 +85,8 @@ function MoviePage() {
     enabled: !!imdbId,
     staleTime: 1000 * 60 * 60 * 24,
   });
+  // The Releases popup, opened from the release date beside the poster.
+  const [releasesOpen, setReleasesOpen] = useState(false);
   if (!m && error) throw error; // shown by the app's error page
   if (!m) return <DetailSkeleton layout="movie" />;
   const trailer = m.videos?.results.find((v) => v.site === "YouTube" && v.type === "Trailer" && v.official) ?? m.videos?.results.find((v) => v.site === "YouTube" && v.type === "Trailer");
@@ -156,7 +160,27 @@ function MoviePage() {
                   const au = getAuCertification(m);
                   return au ? <AuRatingBadge rating={au} /> : null;
                 })()}
-                {m.release_date && <span className="inline-flex items-center gap-1.5"><Calendar className="size-3.5 md:size-4" />{formatDateAULong(m.release_date)}</span>}
+                {m.release_date && (() => {
+                  const rd = (m as { release_dates?: ReleaseDates }).release_dates;
+                  const inner = <><Calendar className="size-3.5 md:size-4" />{formatDateAULong(m.release_date)}</>;
+                  // Tappable when TMDB has release dates by country: opens every release (cinema, digital, physical, TV).
+                  return countReleaseCountries(rd) > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setReleasesOpen(true)}
+                        className="inline-flex items-center gap-1.5 underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 hover:text-foreground"
+                        aria-label={`Released ${formatDateAULong(m.release_date)}. Show all release dates`}
+                      >
+                        {inner}
+                        <ChevronRight className="-ml-1 size-3.5 md:size-4" />
+                      </button>
+                      <ReleasesDialog open={releasesOpen} onOpenChange={setReleasesOpen} releaseDates={rd} />
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">{inner}</span>
+                  );
+                })()}
                 {m.runtime ? <span className="inline-flex items-center gap-1.5"><Clock className="size-3.5 md:size-4" />{formatRuntime(m.runtime)}</span> : null}
               </div>
               {directors.length > 0 && (

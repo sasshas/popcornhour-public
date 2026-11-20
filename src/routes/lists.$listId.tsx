@@ -10,7 +10,9 @@ import {
   Calendar,
   CalendarCheck,
   CheckSquare,
+  Download,
   EllipsisVertical,
+  MonitorPlay,
   Pencil,
   Star,
   Trash2,
@@ -30,6 +32,7 @@ import { FilterButton, FiltersSheet, genreCounts, pickedGenresLabel, withGenres 
 import { listLibrary } from "@/lib/library.functions";
 import { getMoviesAvailability } from "@/lib/tmdb.functions";
 import { getList, updateList, deleteList, removeManyFromList } from "@/lib/lists.functions";
+import { ImportListSheet } from "@/components/media/ImportListSheet";
 import { img } from "@/lib/tmdb";
 import { markHeroPoster, rememberPeek } from "@/lib/peek";
 import { PosterBadges } from "@/components/media/PosterBadges";
@@ -38,6 +41,18 @@ import { useShowTitles } from "@/hooks/use-show-titles";
 import { useRtScores } from "@/hooks/use-rt-scores";
 import { StickyControls } from "@/components/layout/StickyControls";
 import { LoadMore } from "@/components/media/LoadMore";
+import { ReleaseDateBadge, type ReleaseKind } from "@/components/media/ReleaseDateBadge";
+import {
+  airDates,
+  compareUpcoming,
+  isUpcomingMovie,
+  upcomingBadge,
+  upcomingDates,
+  upcomingDateSort,
+  firstPillDateSort,
+  type Availability,
+  type UpcomingDates,
+} from "@/lib/upcoming";
 
 export const Route = createFileRoute("/lists/$listId")({
   head: () => ({ meta: [{ title: "List — Popcornhour" }] }),
@@ -47,29 +62,48 @@ export const Route = createFileRoute("/lists/$listId")({
 type ReleaseFilter = "released" | "unreleased" | "all";
 const RELEASE_FILTERS: { value: ReleaseFilter; label: string }[] = [
   { value: "released", label: "Released" },
-  { value: "unreleased", label: "Unreleased" },
+  { value: "unreleased", label: "Upcoming" }, // the value keeps its old name, so pills remembered on a device still work
   { value: "all", label: "All" },
 ];
 
 // The Library's Sort menu, same options and icons. Last watched comes from your library, so something in the list
 // that is not in your library goes last for it; Rotten Tomatoes is the % on the posters, and titles without one go last.
-type SortKey = "added" | "name" | "rt" | "release" | "watched";
+// On Upcoming, Streaming date and the cinema sort (shown as "Release date") take the place of the usual Release date (as on the Library's Upcoming).
+type SortKey = "added" | "name" | "rt" | "release" | "streaming" | "cinema" | "watched";
 type SortChoice = { sortKey: SortKey; sortDir: "asc" | "desc" };
 const SORTS: { value: SortKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "added", label: "Date added", icon: Calendar },
   { value: "name", label: "Name", icon: Type },
   { value: "rt", label: "Rotten Tomatoes", icon: Star },
   { value: "release", label: "Release date", icon: Calendar },
+  { value: "streaming", label: "Streaming date", icon: MonitorPlay },
+  { value: "cinema", label: "Release date", icon: Calendar }, // labelled Release date: straight-to-streaming movies are in it too
   { value: "watched", label: "Last watched", icon: CalendarCheck },
 ];
-// Each pill has its own sort. Defaults: Released and All newest release first; Unreleased soonest first.
+/**
+ * The sorts offered on a pill. Each pill offers one date sort. All: Release date. Released and Upcoming: the one
+ * Filters > "Released means" (Anywhere = on) picks (src/lib/upcoming.ts), as on the Library: off, both go by Streaming date;
+ * on, Released goes by Release date and Upcoming by the cinema sort (also shown as "Release date").
+ */
+const DATE_SORTS: SortKey[] = ["release", "streaming", "cinema"];
+const dateSortFor = (f: ReleaseFilter, cinemaCounts: boolean): SortKey =>
+  f === "all" ? "release" : f === "unreleased" ? upcomingDateSort(cinemaCounts) : firstPillDateSort(cinemaCounts);
+const sortsFor = (f: ReleaseFilter, cinemaCounts: boolean) =>
+  SORTS.filter((s) => !DATE_SORTS.includes(s.value) || s.value === dateSortFor(f, cinemaCounts));
+// Each pill has its own sort; by default its date sort: Released and All newest first, Upcoming soonest first.
+const defaultSort = (f: ReleaseFilter, cinemaCounts: boolean): SortChoice => ({
+  sortKey: dateSortFor(f, cinemaCounts),
+  sortDir: f === "unreleased" ? "asc" : "desc",
+});
 const DEFAULT_SORTS: Record<ReleaseFilter, SortChoice> = {
-  released: { sortKey: "release", sortDir: "desc" },
-  unreleased: { sortKey: "release", sortDir: "asc" },
-  all: { sortKey: "release", sortDir: "desc" },
+  released: defaultSort("released", false),
+  unreleased: defaultSort("unreleased", false),
+  all: defaultSort("all", false),
 };
 // The sort chosen on each pill is remembered on this device, the same for every list.
-const SORT_KEY = "cx:list-sorts";
+// "-2": Streaming date became the Released default, so a sort saved for Released under the old key is dropped once.
+const SORT_KEY = "cx:list-sorts-2";
+const OLD_SORT_KEY = "cx:list-sorts";
 const isSortChoice = (p: unknown): p is SortChoice =>
   !!p &&
   SORTS.some((s) => s.value === (p as SortChoice).sortKey) &&
@@ -77,15 +111,27 @@ const isSortChoice = (p: unknown): p is SortChoice =>
 function readSorts(): Record<ReleaseFilter, SortChoice> {
   const out = { ...DEFAULT_SORTS };
   try {
-    const p = JSON.parse(localStorage.getItem(SORT_KEY) ?? "null");
-    for (const f of RELEASE_FILTERS) if (isSortChoice(p?.[f.value])) out[f.value] = p[f.value];
+    let p = JSON.parse(localStorage.getItem(SORT_KEY) ?? "null");
+    if (!p) {
+      p = JSON.parse(localStorage.getItem(OLD_SORT_KEY) ?? "null");
+      if (p) delete p.released; // see SORT_KEY
+    }
+    // Whether a saved sort is offered is checked where it is used (it depends on the cinemas filter); a date sort
+    // that is not offered there falls back to the pill's default.
+    for (const f of RELEASE_FILTERS) {
+      const c = p?.[f.value];
+      if (isSortChoice(c)) out[f.value] = c;
+    }
   } catch {
     /* nothing saved, or no storage */
   }
   return out;
 }
 
-const STREAMING_ONLY_KEY = "cx:list-streaming-only";
+// Filters > "Released means" (Anywhere = on) (Released and Upcoming pills), remembered on this device for every list.
+// It also picks the date sort and poster pills of those two pills (see sortsFor). (It replaced "Streaming only",
+// whose saved choice is not carried over.)
+const CINEMA_KEY = "cx:list-cinema-counts";
 
 // Filters > Genres: the genres picked on each list, remembered on this device ({ [list id]: ["Comedy", ...] }). Kept
 // per list, since each list holds different things. A title shows when it has any of them.
@@ -115,10 +161,10 @@ const PAGE_SIZE = 30;
 type ListItem = NonNullable<Awaited<ReturnType<typeof getList>>>["items"][number];
 
 /** Joins the availability answers. A fixed function passed as `combine`, so the result only changes when an answer does. */
-function joinAvailability(results: { data?: { tmdbId: number; available: boolean }[]; isPending: boolean }[]) {
-  const notStreaming: number[] = [];
-  for (const r of results) for (const a of r.data ?? []) if (!a.available) notStreaming.push(a.tmdbId);
-  return { notStreaming, pending: results.some((r) => r.isPending) };
+function joinAvailability(results: { data?: ({ tmdbId: number } & Availability)[]; isPending: boolean }[]) {
+  const byId = new Map<number, Availability>();
+  for (const r of results) for (const a of r.data ?? []) byId.set(a.tmdbId, a);
+  return { byId, pending: results.some((r) => r.isPending) };
 }
 
 /**
@@ -132,7 +178,7 @@ let lastView: {
   entry: string | undefined;
   releaseFilter: ReleaseFilter;
   sorts: Record<ReleaseFilter, SortChoice>;
-  streamingOnly: boolean;
+  cinemaCounts: boolean;
   /** The genres picked on this list (Filters > Genres). */
   genres: string[];
   /** How many posters were drawn, and for which view (pill, sort, filters), so Back can scroll to where you were. */
@@ -163,6 +209,8 @@ const ListTile = memo(function ListTile({
   it,
   showTitles,
   score,
+  badgeDate,
+  badgeKind,
   selecting,
   selected,
   onToggle,
@@ -170,6 +218,9 @@ const ListTile = memo(function ListTile({
   it: ListItem;
   showTitles: boolean;
   score: number | null;
+  /** The date pill (Upcoming only, as the Library's): a movie's digital date, else its cinema date; a show's first air date. */
+  badgeDate: string | null;
+  badgeKind: ReleaseKind;
   selecting: boolean;
   selected: boolean;
   onToggle: (id: string) => void;
@@ -211,7 +262,13 @@ const ListTile = memo(function ListTile({
             <div className="w-full h-full grid place-items-center text-muted-foreground text-xs">No image</div>
           )}
         </div>
-        <PosterBadges mediaType={it.media_type} tmdbId={it.tmdb_id} score={score} showList={false} />
+        <PosterBadges
+          mediaType={it.media_type}
+          tmdbId={it.tmdb_id}
+          score={score}
+          showList={false}
+          bottomLeft={badgeDate && <ReleaseDateBadge date={badgeDate} kind={badgeKind} />}
+        />
         {selecting && (
           // Sits over the watched / watchlist badge while selecting. Solid, no backdrop blur: it is on every poster.
           <span
@@ -248,6 +305,8 @@ function ListDetailPage() {
   const fetchRemove = useServerFn(removeManyFromList);
 
   const [editing, setEditing] = useState(false);
+  // ⋮ > Import: the panel (MDBList link or a list of titles).
+  const [importOpen, setImportOpen] = useState(false);
   // ⋮ > Select: crosses show on every poster, a tap picks a poster, and the bar at the bottom removes the picked ones.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set()); // list item ids
@@ -269,21 +328,22 @@ function ListDetailPage() {
   // and the router can return you to where you had scrolled (as in the Library).
   const returning = lastView && lastView.listId === listId && lastView.entry === historyEntry() ? lastView : null;
   const [releaseFilter, setReleaseFilter] = useState<ReleaseFilter>(returning?.releaseFilter ?? "released");
-  // Filter > "Streaming only" (Released and Unreleased pills), remembered on this device. Off unless switched on.
-  const [streamingOnly, setStreamingOnlyState] = useState(lastView?.streamingOnly ?? false);
+  // Filters > "Released means" (Anywhere = on) (Released and Upcoming pills), as the Library's: a movie that has opened in
+  // cinemas moves from Upcoming to Released. Remembered on this device. Off unless switched on.
+  const [cinemaCounts, setCinemaCountsState] = useState(lastView?.cinemaCounts ?? false);
   useEffect(() => {
     if (lastView) return; // already known (read on an earlier visit while the app has been open)
     try {
-      setStreamingOnlyState(localStorage.getItem(STREAMING_ONLY_KEY) === "1");
+      setCinemaCountsState(localStorage.getItem(CINEMA_KEY) === "1");
     } catch {
       /* no storage */
     }
   }, []);
-  const setStreamingOnly = (on: boolean) => {
-    setStreamingOnlyState(on);
+  const setCinemaCounts = (on: boolean) => {
+    setCinemaCountsState(on);
     setSelected(new Set()); // the pills' contents change
     try {
-      localStorage.setItem(STREAMING_ONLY_KEY, on ? "1" : "0");
+      localStorage.setItem(CINEMA_KEY, on ? "1" : "0");
     } catch {
       /* not saved; still applies now */
     }
@@ -313,13 +373,16 @@ function ListDetailPage() {
   const ownEntry = useRef<string | undefined>(undefined);
   useEffect(() => {
     ownEntry.current ??= historyEntry();
-    lastView = { listId, entry: ownEntry.current, releaseFilter, sorts, streamingOnly, genres: pickedGenres, more };
-  }, [listId, releaseFilter, sorts, streamingOnly, pickedGenres, more]);
-  const sort = sorts[releaseFilter]; // the sort of the pill that is showing
+    lastView = { listId, entry: ownEntry.current, releaseFilter, sorts, cinemaCounts, genres: pickedGenres, more };
+  }, [listId, releaseFilter, sorts, cinemaCounts, pickedGenres, more]);
+  // The sort of the pill that is showing (its default if what is saved is not offered there).
+  const sort = sortsFor(releaseFilter, cinemaCounts).some((s) => s.value === sorts[releaseFilter].sortKey)
+    ? sorts[releaseFilter]
+    : defaultSort(releaseFilter, cinemaCounts);
   // Changes only the showing pill's sort.
   const chooseSort = (patch: Partial<SortChoice>) =>
     setSorts((all) => {
-      const next = { ...all, [releaseFilter]: { ...all[releaseFilter], ...patch } };
+      const next = { ...all, [releaseFilter]: { ...sort, ...patch } };
       try {
         localStorage.setItem(SORT_KEY, JSON.stringify(next));
       } catch {
@@ -397,6 +460,16 @@ function ListDetailPage() {
     onError: () => toast.error("Couldn't remove them. Nothing was changed"),
   });
 
+  // ⋮ > Import: what is on the list already (the panel labels those), and a refresh once something was added.
+  const onListKeys = useMemo(
+    () => new Set((list?.items ?? []).map((i) => `${i.media_type}:${i.tmdb_id}`)),
+    [list?.items],
+  );
+  const afterImport = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["list", listId] });
+    qc.invalidateQueries({ queryKey: ["lists"] }); // My Lists' counts and the "in a list" badges elsewhere
+  }, [qc, listId]);
+
   // Hooks must run on every render, so this sits above the early returns below. Calling it after
   // them changed the hook count between the loading and loaded renders (React error #310).
   const scoreItems = useMemo(
@@ -406,27 +479,27 @@ function ListDetailPage() {
   // getDate: the full release date from TMDB. Lists imported from Trakt only saved the year ("2026"), which cannot
   // tell August from November or say whether a film later this year is out yet.
   // datesLoading: until they arrive the posters and count wait (otherwise films due later this year would show
-  // under Released for a moment and then jump to Unreleased).
+  // under Released for a moment and then jump to Upcoming).
   const { getScore, getDate, getGenres, loading: datesLoading } = useTmdbInfo(scoreItems);
   // Rotten Tomatoes scores for every title in the list, asked for only while that sort is chosen.
   const getRt = useRtScores(scoreItems, sort.sortKey === "rt");
   const showTitles = useShowTitles("lists"); // Settings > Appearance
 
-  // Filter > "Streaming only": like the Library's Unwatched and Upcoming, a NEW movie (released this year or last
-  // year) that cannot be watched at home yet moves from Released to Unreleased. Older movies always stay in Released,
-  // streaming or not, and shows are not affected. Availability is asked for only those new movies, and only while
-  // the option is on (and Released or Unreleased is showing).
+  // Upcoming works as the Library's (the same rule, src/lib/upcoming.ts): a movie is Upcoming while it cannot be
+  // watched at home yet and is new; a show while its first air date is still ahead. Availability is asked for only
+  // the movies that could be upcoming (this year's, last year's and undated ones; older movies are always Released),
+  // once their full dates are in, and only while Released or Upcoming is showing.
   const thisYear = new Date().getFullYear();
   const newMovieIds = useMemo(() => {
-    if (!streamingOnly || releaseFilter === "all") return [];
+    if (releaseFilter === "all" || datesLoading) return [];
     const ids = new Set<number>();
     for (const it of list?.items ?? []) {
       if (it.media_type !== "movie") continue;
       const year = parseInt((getDate("movie", it.tmdb_id) ?? it.release_date ?? "").slice(0, 4), 10);
-      if (!Number.isNaN(year) && year >= thisYear - 1) ids.add(it.tmdb_id);
+      if (Number.isNaN(year) || year >= thisYear - 1) ids.add(it.tmdb_id);
     }
     return [...ids].sort((a, b) => a - b);
-  }, [streamingOnly, releaseFilter, list?.items, getDate, thisYear]);
+  }, [releaseFilter, datesLoading, list?.items, getDate, thisYear]);
   const fetchAvail = useServerFn(getMoviesAvailability);
   const avail = useQueries({
     queries: Array.from({ length: Math.ceil(newMovieIds.length / 500) }, (_, i) => newMovieIds.slice(i * 500, i * 500 + 500)).map(
@@ -439,9 +512,9 @@ function ListDetailPage() {
     ),
     combine: joinAvailability,
   });
-  const notStreaming = useMemo(() => new Set(avail.notStreaming), [avail.notStreaming]);
-  // The posters and the count wait for the full dates and (with Streaming only on) what is streaming, so nothing
-  // shows under the wrong pill and then jumps.
+  const availById = avail.byId;
+  // The posters and the count wait for the full dates and what is streaming, so nothing shows under the wrong pill
+  // and then jumps.
   const gridWaiting = datesLoading || avail.pending;
 
   // The posters under the showing pill, in the chosen order. Worked out only when one of those things changes, not on
@@ -457,15 +530,31 @@ function ListDetailPage() {
     const today = todayLocal();
     return (list?.items ?? []).filter((it) => {
       if (releaseFilter === "all") return true;
-      const d = dateOf(it);
-      // A year alone counts as released once that year has started (until the full date has loaded).
-      const released = !!d && (d.length === 4 ? d <= today.slice(0, 4) : d.slice(0, 10) <= today);
-      // Streaming only: a new movie that is out but not streaming yet counts as Unreleased. (notStreaming is empty
-      // unless the option is on, and only ever holds new movies.)
-      const waiting = released && it.media_type === "movie" && notStreaming.has(it.tmdb_id);
-      return releaseFilter === "unreleased" ? !released || waiting : released && !waiting;
+      let upcoming: boolean;
+      if (it.media_type === "movie") {
+        // Older movies were not looked up (no availability), so they are never upcoming, as in the Library.
+        upcoming = isUpcomingMovie(availById.get(it.tmdb_id), dateOf(it), cinemaCounts);
+      } else {
+        // A show: upcoming until its first air date. A year alone counts as aired once that year has started.
+        const d = dateOf(it);
+        upcoming = !d || (d.length === 4 ? d > today.slice(0, 4) : d.slice(0, 10) > today);
+      }
+      return releaseFilter === "unreleased" ? upcoming : !upcoming;
     });
-  }, [list?.items, releaseFilter, notStreaming, dateOf]);
+  }, [list?.items, releaseFilter, availById, cinemaCounts, dateOf]);
+  // Upcoming's dates (as the Library's, src/lib/upcoming.ts): a movie's streaming and cinema dates, a show's first air
+  // date for both. The poster's pill shows the cinema date when sorted by Cinema date, else the streaming date when
+  // there is one (else the cinema date); a show's pill is its first air date.
+  const upcomingDatesOf = useCallback(
+    (it: ListItem): UpcomingDates =>
+      it.media_type === "movie" ? upcomingDates(availById.get(it.tmdb_id), dateOf(it)) : airDates(dateOf(it)),
+    [availById, dateOf],
+  );
+  const badgeOf = (it: ListItem): { date: string; kind: ReleaseKind } | null => {
+    if (it.media_type === "movie") return upcomingBadge(availById.get(it.tmdb_id), upcomingDateSort(cinemaCounts));
+    const d = dateOf(it);
+    return d && d.length >= 10 ? { date: d.slice(0, 10), kind: "tv" } : null;
+  };
   const genreOptions = useMemo(
     () => genreCounts(pillItems, (it) => getGenres(it.media_type, it.tmdb_id), pickedGenres),
     [pillItems, getGenres, pickedGenres],
@@ -487,7 +576,15 @@ function ListDetailPage() {
         case "rt":
           return byMaybe(getRt(a.media_type, a.tmdb_id), getRt(b.media_type, b.tmdb_id), (x, y) => x - y);
         case "release":
-          return byMaybe(dateOf(a), dateOf(b), (x, y) => x.localeCompare(y));
+          // On Released (cinemas filter on) the US cinema date where it is known, as the Library's Unwatched; on All
+          // (nothing looked up there) TMDB's release date.
+          return releaseFilter === "released"
+            ? compareUpcoming(upcomingDatesOf(a), upcomingDatesOf(b), "cinema", dir)
+            : byMaybe(dateOf(a), dateOf(b), (x, y) => x.localeCompare(y));
+        case "streaming":
+        case "cinema":
+          // When it can be watched at home, or when it opens in cinemas (as the Library's, src/lib/upcoming.ts).
+          return compareUpcoming(upcomingDatesOf(a), upcomingDatesOf(b), sortKey, dir);
         case "watched":
           return byMaybe(watchedOf(a), watchedOf(b), (x, y) => x - y);
         case "added":
@@ -495,9 +592,9 @@ function ListDetailPage() {
           return dir * (Date.parse(a.added_at ?? "") - Date.parse(b.added_at ?? "") || 0);
       }
     });
-  }, [pillItems, pickedGenres, getGenres, dateOf, sortKey, sortDir, getRt, libByKey]);
+  }, [pillItems, pickedGenres, getGenres, dateOf, sortKey, sortDir, getRt, libByKey, upcomingDatesOf, releaseFilter]);
   // Only the first `shownCount` are drawn; the rest follow as you scroll near the end.
-  const viewKey = `${releaseFilter}|${sortKey}|${sortDir}|${streamingOnly}|${pickedGenres.join(",")}`;
+  const viewKey = `${releaseFilter}|${sortKey}|${sortDir}|${cinemaCounts}|${pickedGenres.join(",")}`;
   const shownCount = more.key === viewKey ? more.n : PAGE_SIZE;
 
   // Still checking who is signed in (the list is not fetched until then), or fetching it: show Loading,
@@ -575,6 +672,9 @@ function ListDetailPage() {
                   <DropdownMenuItem onSelect={() => setEditing(true)}>
                     <Pencil className="size-4" /> Edit list
                   </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                    <Download className="size-4" /> Import
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     // Wait for the menu to close before the "are you sure?" box opens.
                     onSelect={() =>
@@ -597,7 +697,7 @@ function ListDetailPage() {
           </div>
         )}
 
-        {/* Released / Unreleased / All. Released = has a release date of today or earlier. */}
+        {/* Released / Upcoming / All. Released = has a release date of today or earlier. */}
         {/* Filter and Sort sit to the right of the pills, as in the Library (on a phone they wrap underneath). */}
         {(list.items?.length ?? 0) > 0 && (
           <div className="flex flex-wrap gap-x-2 gap-y-2 items-center">
@@ -630,16 +730,7 @@ function ListDetailPage() {
             <FiltersSheet
               open={filtersOpen}
               onOpenChange={setFiltersOpen}
-              toggle={
-                releaseFilter !== "all"
-                  ? {
-                      label: "Streaming only",
-                      hint: "New movies you can't watch at home yet move to Unreleased. Older movies stay in Released",
-                      checked: streamingOnly,
-                      onChange: setStreamingOnly,
-                    }
-                  : null
-              }
+              releasedMeans={releaseFilter !== "all" ? { anywhere: cinemaCounts, onChange: setCinemaCounts } : null}
               genres={genreOptions}
               pickedGenres={pickedGenres}
               onToggleGenre={toggleGenre}
@@ -647,7 +738,7 @@ function ListDetailPage() {
               region={region}
               onClearAll={() => {
                 setPickedGenres([]);
-                if (releaseFilter !== "all" && streamingOnly) setStreamingOnly(false);
+                if (releaseFilter !== "all" && cinemaCounts) setCinemaCounts(false);
               }}
             />
             <DropdownMenu>
@@ -659,7 +750,7 @@ function ListDetailPage() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {SORTS.map((s) => (
+                {sortsFor(releaseFilter, cinemaCounts).map((s) => (
                   <DropdownMenuItem
                     key={s.value}
                     onClick={() => chooseSort({ sortKey: s.value })}
@@ -686,6 +777,12 @@ function ListDetailPage() {
         {(list.items?.length ?? 0) === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-12 text-center">
             <p className="text-muted-foreground">This list is empty.</p>
+            <button
+              onClick={() => setImportOpen(true)}
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-surface border border-border px-4 py-2 text-sm font-medium hover:border-primary/50"
+            >
+              <Download className="size-4" /> Import
+            </button>
           </div>
         ) : gridWaiting ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
@@ -705,17 +802,22 @@ function ListDetailPage() {
         ) : (
           <>
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-              {shownItems.slice(0, shownCount).map((it) => (
+              {shownItems.slice(0, shownCount).map((it) => {
+                const badge = releaseFilter === "unreleased" ? badgeOf(it) : null;
+                return (
                 <ListTile
                   key={it.id}
                   it={it}
                   showTitles={showTitles}
                   score={getScore(it.media_type, it.tmdb_id)}
+                  badgeDate={badge?.date ?? null}
+                  badgeKind={badge?.kind ?? "cinema"}
                   selecting={selecting}
                   selected={selected.has(it.id)}
                   onToggle={toggleSelected}
                 />
-              ))}
+                );
+              })}
             </div>
             {/* The next lot of posters is drawn about two screens before you reach the end of what is drawn. */}
             {shownCount < shownItems.length && (
@@ -724,6 +826,16 @@ function ListDetailPage() {
           </>
         )}
       </div>
+
+      {/* ⋮ > Import: from an MDBList link, or a pasted list of movie titles (matched, with a pick where unsure). */}
+      <ImportListSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        listId={listId}
+        listName={list.name}
+        onList={onListKeys}
+        onImported={afterImport}
+      />
 
       {/* Select mode's bar: how many are picked, Select all / Clear, Remove and Done. On a phone it floats just above
           the bottom menu; on a wider screen it sits at the bottom right. */}

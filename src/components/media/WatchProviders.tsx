@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getWatchProviders } from "@/lib/tmdb.functions";
+import { getMoviesAvailability, getWatchProviders } from "@/lib/tmdb.functions";
 import { img } from "@/lib/tmdb";
 import { useEffect, useState } from "react";
-import { ChevronDown, Globe } from "lucide-react";
+import { CalendarClock, ChevronDown, Globe } from "lucide-react";
+import { formatDateAULong } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,25 @@ export function WatchProviders({ mediaType, tmdbId }: { mediaType: "movie" | "tv
     queryFn: () => fetchProviders({ data: { mediaType, id: tmdbId } }),
     staleTime: 1000 * 60 * 60,
   });
+
+  // A movie that cannot be watched at home yet (the Library's and a list's Upcoming pill) but has a US digital
+  // release date ahead: that date is shown under the logos. The same request (and key) the Library and the Watched
+  // popup make for one movie, kept 6 hours on the server. The section waits for both, so the line does not pop in.
+  const isMovie = mediaType === "movie";
+  const fetchAvail = useServerFn(getMoviesAvailability);
+  const { data: avail, isLoading: availLoading } = useQuery({
+    queryKey: ["movie-availability", [tmdbId]],
+    queryFn: () => fetchAvail({ data: { ids: [tmdbId] } }),
+    enabled: isMovie,
+    staleTime: 60 * 60 * 1000,
+  });
+  const streamingDay = (() => {
+    const a = avail?.[0];
+    const day = a?.digitalDate?.slice(0, 10);
+    if (!a || a.available || !day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, this device's day
+    return day > today ? day : null;
+  })();
 
   const byRegion = data?.[region];
   const flatrate = byRegion?.flatrate ?? [];
@@ -68,7 +88,7 @@ export function WatchProviders({ mediaType, tmdbId }: { mediaType: "movie" | "tv
         </DropdownMenu>
       </div>
 
-      {isLoading ? (
+      {isLoading || (isMovie && availLoading) ? (
         // Holds the space of one row of logos while the list loads, so the sections below do not jump down.
         <div className="flex items-center gap-2" aria-hidden>
           <span className="w-14 shrink-0" />
@@ -82,6 +102,16 @@ export function WatchProviders({ mediaType, tmdbId }: { mediaType: "movie" | "tv
           <ProviderRow label="Rent" providers={rent} link={link} />
           <ProviderRow label="Buy" providers={buy} link={link} />
         </div>
+      )}
+
+      {streamingDay && !isLoading && (
+        <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-surface border border-border px-3 py-1.5 text-sm">
+          <CalendarClock className="size-4 shrink-0 text-primary" />
+          <span>
+            Streaming from <span className="font-semibold">{formatDateAULong(`${streamingDay}T12:00`)}</span>
+            <span className="text-muted-foreground"> (US date)</span>
+          </span>
+        </p>
       )}
     </section>
   );

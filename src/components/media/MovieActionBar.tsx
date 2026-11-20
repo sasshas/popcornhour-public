@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Ban, Bookmark, Check, ChevronDown, Clock, Heart, History, Hourglass, Link2, MessageSquare, Pause, Play, RotateCw, Star, Trash2,
+  Ban, Bookmark, Check, ChevronDown, Clock, Heart, History, Hourglass, Link2, MessageSquare, Pause, Play, RotateCw, Star, Trash2, Users,
 } from "lucide-react";
+import { getInterested, setInterested } from "@/lib/interested.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { getLibraryItem, listLibrary, upsertLibraryItem, removeLibraryItem } from "@/lib/library.functions";
 import { addPlay, listPlays } from "@/lib/plays.functions";
@@ -239,13 +240,25 @@ export function MovieActionBar(props: Props) {
           width (max-w-sm) on a phone left the row stuck to the left on screens wider than 384px. Desktop keeps
           the capped, left-aligned row. */}
       <div className="grid grid-cols-5 gap-2 justify-items-center md:max-w-sm md:justify-items-start">
-        <CircleAction
-          label="Favourite"
-          active={!!item?.favorite}
-          onClick={() => save.mutate({ favorite: !item?.favorite })}
-        >
-          <Heart className={`size-5 ${item?.favorite ? "fill-current" : ""}`} />
-        </CircleAction>
+        {/* First circle: "Jess is interested" when WATCH_TOGETHER_NAME is set, the Favourite heart when it isn't. */}
+        <InterestedButton
+          mediaType={mediaType}
+          tmdbId={props.tmdbId}
+          title={props.title}
+          posterPath={props.posterPath ?? null}
+          backdropPath={props.backdropPath ?? null}
+          releaseDate={props.releaseDate ?? null}
+          userId={user.id}
+          fallback={
+            <CircleAction
+              label="Favourite"
+              active={!!item?.favorite}
+              onClick={() => save.mutate({ favorite: !item?.favorite })}
+            >
+              <Heart className={`size-5 ${item?.favorite ? "fill-current" : ""}`} />
+            </CircleAction>
+          }
+        />
 
         <CircleAction
           label={item?.rating ? `Your rating ${item.rating}/10` : "Rate"}
@@ -391,6 +404,78 @@ function ShowStatusMenu({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * "Jess is interested": a purple two-people circle, first in the row, that puts the title on (or takes it off) the partner's
+ * list in one tap. It takes the Favourite heart's place; with WATCH_TOGETHER_NAME not set on the server, the
+ * Favourite heart is shown instead. See interested.functions.ts.
+ */
+function InterestedButton(props: {
+  mediaType: "movie" | "tv";
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  releaseDate: string | null;
+  userId: string;
+  /** Shown instead when WATCH_TOGETHER_NAME is not set. */
+  fallback: React.ReactNode;
+}) {
+  const qc = useQueryClient();
+  const fetchState = useServerFn(getInterested);
+  const fetchSet = useServerFn(setInterested);
+  const key = ["interested", props.mediaType, props.tmdbId, props.userId];
+  const { data } = useQuery({
+    queryKey: key,
+    queryFn: () => fetchState({ data: { mediaType: props.mediaType, tmdbId: props.tmdbId } }),
+  });
+  const toggle = useMutation({
+    mutationFn: (interested: boolean) =>
+      fetchSet({
+        data: {
+          interested,
+          mediaType: props.mediaType,
+          tmdbId: props.tmdbId,
+          title: props.title,
+          posterPath: props.posterPath,
+          backdropPath: props.backdropPath,
+          releaseDate: props.releaseDate,
+        },
+      }),
+    // Flip at once; the refetch below puts it right if the save failed.
+    onMutate: (interested) => qc.setQueryData(key, (d: typeof data) => (d ? { ...d, isIn: interested } : d)),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: key });
+      // The same list shows on the Lists pages and colours the Add to list circle.
+      qc.invalidateQueries({ queryKey: ["lists-containing", props.mediaType, props.tmdbId] });
+      qc.invalidateQueries({ queryKey: ["lists"] });
+      qc.invalidateQueries({ queryKey: ["list"] });
+    },
+  });
+
+  // No name set: the plain Favourite heart. Until the answer arrives, an empty circle that does nothing, so it
+  // shows neither icon (nor Favourite's state) before it knows which one it is.
+  if (data && !data.name) return <>{props.fallback}</>;
+  const on = !!data?.isIn;
+  const label = data?.name ? `${data.name} is interested` : "Loading";
+  return (
+    <button
+      onClick={data?.name ? () => toggle.mutate(!on) : undefined}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      className={[
+        "aspect-square w-full max-w-14 grid place-items-center rounded-full border transition",
+        // Its own purple (fixed, whatever the theme colour), so it never reads as a Favourite or a rating.
+        on
+          ? "bg-violet-500/25 border-violet-400/70 text-violet-300 shadow-[0_0_14px_-2px] shadow-violet-500/50"
+          : "bg-surface border-border text-muted-foreground hover:text-violet-300 hover:border-violet-400/50",
+      ].join(" ")}
+    >
+      {data?.name && <Users className="size-5" strokeWidth={on ? 2.5 : 2} />}
+    </button>
   );
 }
 

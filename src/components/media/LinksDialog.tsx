@@ -2,6 +2,7 @@ import { Link2, Share2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { FloatingSheet } from "@/components/ui/floating-sheet";
+import { createLocalFlag } from "@/hooks/use-local-flag";
 import googleIcon from "@/assets/links/google.svg";
 import traktIcon from "@/assets/links/trakt.svg";
 import letterboxdIcon from "@/assets/links/letterboxd.svg";
@@ -18,6 +19,9 @@ type Props = {
   year?: string | null;
   mediaType?: "movie" | "tv";
 };
+
+// Share's "Link to" choice: off = IMDb (or TMDb), on = this app's own page. Saved on this device.
+const [, setShareOwnLink, useShareOwnLink] = createLocalFlag("cx:share-own-link", false);
 
 // Every icon sits in the same 32px cell so the labels line up.
 const IMG = "size-7 rounded-md";
@@ -47,12 +51,16 @@ export function LinksDialog({ open, onOpenChange, title, tmdbId, imdbId, homepag
     { label: "Wikipedia", href: `https://en.wikipedia.org/w/index.php?search=${q}` },
   ];
 
-  // What gets shared: the movie's name and year, linked to its IMDb page (TMDb when it has no IMDb id).
-  // A public page, since this app's own address only works at home and behind the password.
+  // What gets shared: the movie's name and year, linked to the page picked under "Link to" (remembered on this
+  // device). IMDb (TMDb when it has no IMDb id) is a public page anyone can open; Popcornhour is this page in this
+  // app, at the address it is open on now, which only works where that address does and behind the password.
+  const ownLink = useShareOwnLink();
   const name = year ? `${title} (${year})` : title;
-  const shareUrl = imdbId ? `https://www.imdb.com/title/${imdbId}/` : tmdbUrl;
+  const publicUrl = imdbId ? `https://www.imdb.com/title/${imdbId}/` : tmdbUrl;
+  const publicLabel = imdbId ? "IMDb" : "TMDb";
 
   async function share() {
+    const shareUrl = ownLink ? `${window.location.origin}/${tv ? "tv" : "movie"}/${tmdbId}` : publicUrl;
     // The phone's share sheet, where the browser offers it (only on https addresses).
     if (typeof navigator.share === "function") {
       try {
@@ -83,6 +91,29 @@ export function LinksDialog({ open, onOpenChange, title, tmdbId, imdbId, homepag
             {l.label}
           </a>
         ))}
+        <div className="col-span-2 mt-1 flex items-center gap-3">
+          <span className="shrink-0 text-sm text-muted-foreground">Link to</span>
+          <div role="radiogroup" aria-label="Link to" className="grid flex-1 grid-cols-2 gap-1 rounded-full bg-white/[0.07] p-1">
+            {[
+              { own: false, label: publicLabel },
+              { own: true, label: "Popcornhour" },
+            ].map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                role="radio"
+                aria-checked={ownLink === o.own}
+                onClick={() => setShareOwnLink(o.own)}
+                className={[
+                  "rounded-full px-3 py-1.5 text-sm font-medium transition",
+                  ownLink === o.own ? "bg-white/[0.18] text-foreground" : "text-foreground/60 hover:text-foreground",
+                ].join(" ")}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           type="button"
           onClick={share}

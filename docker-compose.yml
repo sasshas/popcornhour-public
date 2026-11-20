@@ -47,4 +47,5 @@ services:
       TRAKT_CLIENT_SECRET: "${TRAKT_CLIENT_SECRET:-}"
       WETRAKR_CLIENT_ID: "${WETRAKR_CLIENT_ID:-}" # Connect WeTrakr + Import
       WETRAKR_CLIENT_SECRET: "${WETRAKR_CLIENT_SECRET:-}"
+      WATCH_TOGETHER_NAME: "${WATCH_TOGETHER_NAME:-}" # swaps the Favourite heart on title pages for "<name> is interested" (empty = keep Favourite)
       CRON_SECRET: "${CRON_SECRET:-}" # empty = POST /api/public/hooks/check-new-seasons is disabled (503)

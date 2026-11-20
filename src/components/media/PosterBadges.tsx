@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Bookmark, Check, ListChecks, Play, Star } from "lucide-react";
+import { Bookmark, Check, ListChecks, Play, Star, Users } from "lucide-react";
 import { img, tmdbPercent } from "@/lib/tmdb";
 import { useInView } from "@/hooks/use-in-view";
 import { useLibraryStatus } from "@/hooks/use-library-status";
 import { useListMembership } from "@/hooks/use-list-membership";
+import { useInterestedMembership } from "@/hooks/use-interested-membership";
 import { useProviderBadges } from "@/hooks/use-provider-badges";
 import { usePosterScore } from "@/hooks/use-poster-score";
 import { tomatometerIcon, type TomatometerIcon } from "@/lib/rotten-tomatoes";
@@ -30,6 +31,7 @@ const LOGO_SIZES = [["w45", 45], ["w92", 92], ["w154", 154]] as const;
  *
  *   top left     the score pill (Rotten Tomatoes, else IMDb, else nothing)
  *   top right    watched, else watching (a show), else on your watchlist, with "in one of your lists" stacked below it
+ *                (two people instead of the list icon when it's on the "<name> is interested" list)
  *   bottom left  streaming services the title is on (subscription, in your region)
  *
  * Streaming services are looked up only once the poster scrolls into view.
@@ -58,6 +60,9 @@ export function PosterBadges({
   const { watched, watching, watchlist } = useLibraryStatus()(mediaType, tmdbId);
   const inList = useListMembership()(mediaType, tmdbId);
   const listed = showList && inList;
+  // On the "<name> is interested" list: the list badge shows two people instead (even if it's on other lists too).
+  const interested = useInterestedMembership();
+  const forPartner = listed && interested.has(mediaType, tmdbId);
 
   const logos = providers.slice(0, MAX_LOGOS);
   const extra = providers.length - logos.length;
@@ -152,9 +157,9 @@ export function PosterBadges({
           {listed && (
             <span
               className={`${CIRCLE} bg-violet-500 text-white ${watched || watchlist ? "-ml-1.5 md:-ml-2" : ""}`}
-              title="In one of your lists"
+              title={forPartner ? `${interested.name} is interested` : "In one of your lists"}
             >
-              <ListChecks className={ICON} />
+              {forPartner ? <Users className={ICON} strokeWidth={2.5} /> : <ListChecks className={ICON} />}
             </span>
           )}
         </div>

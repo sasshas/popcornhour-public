@@ -1,7 +1,6 @@
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FloatingSheet } from "@/components/ui/floating-sheet";
-import { Switch } from "@/components/ui/switch";
 import { CountryRadioGroup } from "@/components/media/CountryRadioGroup";
 import { useMenuEdgeGap } from "@/hooks/use-fullscreen-mode";
 import { regionName } from "@/lib/region";
@@ -63,17 +62,26 @@ export function FilterButton({
   );
 }
 
-export type FilterSwitch = {
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
+/**
+ * "Released means": the two modes of the Library's and a list's first pill and Upcoming (src/lib/upcoming.ts).
+ *   At home (default)  a movie counts as out once it can be streamed, rented or bought; sorted by streaming date.
+ *   Anywhere           out in cinemas counts too; sorted by release date.
+ * Stored by each page as its old "Include movies in cinemas" switch (anywhere = on), so a saved choice carries over.
+ */
+export type ReleasedMeans = {
+  anywhere: boolean;
+  onChange: (anywhere: boolean) => void;
 };
+
+const RELEASED_MEANS = [
+  { anywhere: false, label: "At home", hint: "Streaming, rent or buy. Sorted by streaming date." },
+  { anywhere: true, label: "Anywhere", hint: "Cinemas count too. Sorted by release date." },
+] as const;
 
 export function FiltersSheet({
   open,
   onOpenChange,
-  toggle,
+  releasedMeans,
   genres,
   pickedGenres,
   onToggleGenre,
@@ -83,19 +91,19 @@ export function FiltersSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** A switch row at the top (the Library's "Include movies in cinemas", a list's "Streaming only"); none when absent. */
-  toggle?: FilterSwitch | null;
+  /** The "Released means" picker at the top (on the pills it changes); none when absent. */
+  releasedMeans?: ReleasedMeans | null;
   genres: readonly (readonly [string, number])[];
   pickedGenres: readonly string[];
   onToggleGenre: (genre: string, on: boolean) => void;
   /** The genres are still being looked up (shows "Loading…" instead of "None found"). */
   genresLoading: boolean;
   region: string | null;
-  /** Unpicks the genres and switches the switch off. "Clear all" shows only when there is something to clear. */
+  /** Unpicks the genres and sets "Released means" back to At home. "Clear all" shows only when there is something to clear. */
   onClearAll: () => void;
 }) {
   const menuEdgeGap = useMenuEdgeGap(); // keeps the country menu clear of the status bar in fullscreen
-  const canClear = pickedGenres.length > 0 || !!toggle?.checked;
+  const canClear = pickedGenres.length > 0 || !!releasedMeans?.anywhere;
   return (
     <FloatingSheet
       open={open}
@@ -115,18 +123,33 @@ export function FiltersSheet({
     >
       {/* Scrolls inside when the genres and the rest do not fit (a long TV list on a short phone). */}
       <div className="-mx-5 max-h-[min(70dvh,36rem)] space-y-6 overflow-y-auto px-5 pb-1">
-        {toggle && (
-          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-white/[0.07] px-4 py-3.5">
-            <span>
-              <span className="block text-[15px] font-medium">{toggle.label}</span>
-              <span className="block text-xs text-muted-foreground">{toggle.hint}</span>
-            </span>
-            <Switch
-              checked={toggle.checked}
-              onCheckedChange={toggle.onChange}
-              className="h-7 w-12 data-[state=unchecked]:bg-white/20 [&>span]:size-6 [&>span]:bg-white [&>span]:data-[state=checked]:translate-x-5"
-            />
-          </label>
+        {releasedMeans && (
+          <section>
+            <h3 className="mb-3 text-base font-semibold">Released means</h3>
+            <div className="grid grid-cols-2 gap-1 rounded-2xl bg-white/[0.07] p-1" role="radiogroup" aria-label="Released means">
+              {RELEASED_MEANS.map((o) => {
+                const on = releasedMeans.anywhere === o.anywhere;
+                return (
+                  <button
+                    key={o.label}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => !on && releasedMeans.onChange(o.anywhere)}
+                    className={[
+                      "rounded-xl px-3 py-2.5 text-[15px] font-medium transition active:scale-95",
+                      on ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 px-1 text-xs text-muted-foreground">
+              {RELEASED_MEANS.find((o) => o.anywhere === releasedMeans.anywhere)!.hint}
+            </p>
+          </section>
         )}
         <section>
           <h3 className="mb-3 text-base font-semibold">Genres</h3>
