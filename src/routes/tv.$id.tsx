@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useMatches } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { peekOf } from "@/lib/peek";
+import { markHeroPoster, peekOf } from "@/lib/peek";
 import { tvQuery } from "@/lib/tv-query";
 import { MediaRail } from "@/components/media/MediaRail";
 import { img, formatRuntime, type TVDetails } from "@/lib/tmdb";
@@ -15,6 +15,7 @@ import { WhatPeopleSay } from "@/components/media/WhatPeopleSay";
 import { ParentsGuide } from "@/components/media/ParentsGuide";
 import { SeasonList } from "@/components/media/SeasonList";
 import { DetailBackdrop, DetailPoster, DetailSkeleton } from "@/components/media/DetailHero";
+import { SeeAllCast } from "@/components/media/CastGrid";
 
 export const Route = createFileRoute("/tv/$id")({
   // A page opened directly is drawn on the server, which waits for the details. A tap inside the app does not wait:
@@ -230,11 +231,15 @@ function TVPage() {
 
       {m.credits?.cast && m.credits.cast.length > 0 && (
         <div className="px-4 md:px-10">
-          <h2 className="text-lg md:text-xl font-semibold mb-3">Top cast</h2>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <h2 className="text-lg md:text-xl font-semibold">Top cast</h2>
+            {/* Always: the row only has the latest season's regulars; the full page has everyone from every season. */}
+            <SeeAllCast type="tv" id={m.id} />
+          </div>
           <div className="flex gap-3 overflow-x-auto scrollbar-none -mx-4 px-4 md:-mx-10 md:px-10 pb-1">
             {m.credits.cast.slice(0, 20).map((c) => (
-              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group">
-                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
+              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group" onClick={(e) => markHeroPoster(e.currentTarget)}>
+                <div data-hero={`person:${c.id}`} className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
                   {c.profile_path ? <img src={img(c.profile_path, "w185")!} alt={c.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" /> : <div className="w-full h-full grid place-items-center text-xs text-muted-foreground">No photo</div>}
                 </div>
                 <p className="mt-2 text-xs font-medium line-clamp-1">{c.name}</p>

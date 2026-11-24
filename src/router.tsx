@@ -3,6 +3,7 @@ import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { returnHeroPoster } from "@/lib/peek";
 import { setLastNavAction } from "@/lib/nav-action";
+import { initBackToClose } from "@/lib/back-to-close";
 
 export const getRouter = () => {
   const queryClient = new QueryClient();
@@ -30,6 +31,8 @@ export const getRouter = () => {
     router.subscribe("onRendered", (e) => returnHeroPoster(e.fromLocation?.pathname));
     // Remember whether each page change was a fresh visit or Back/Forward (see nav-action.ts; Home uses it).
     router.history.subscribe(({ action }) => setLastNavAction(action.type));
+    // The phone's Back gesture closes an open popup instead of leaving the page (see back-to-close.ts).
+    initBackToClose(router.history);
   }
 
   return router;

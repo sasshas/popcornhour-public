@@ -49,3 +49,5 @@ services:
       WETRAKR_CLIENT_SECRET: "${WETRAKR_CLIENT_SECRET:-}"
       WATCH_TOGETHER_NAME: "${WATCH_TOGETHER_NAME:-}" # swaps the Favourite heart on title pages for "<name> is interested" (empty = keep Favourite)
       CRON_SECRET: "${CRON_SECRET:-}" # empty = POST /api/public/hooks/check-new-seasons is disabled (503)
+      HA_WEBHOOK_URL: "${HA_WEBHOOK_URL:-}" # Home Assistant webhook for release notifications (empty = off)
+      LIST_API_TOKEN: "${LIST_API_TOKEN:-}" # lets Ultrahour add titles to a list and mark movies watched (empty = both /api/public endpoints disabled)

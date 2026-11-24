@@ -14,8 +14,8 @@ export function PosterCard({ item, size = "md", note }: { item: MediaItem; size?
   const showTitles = useShowTitles("home"); // Settings > Appearance (people always keep their names)
   if (mediaType === "person") {
     return (
-      <Link to="/person/$id" params={{ id: String(item.id) }} className={`group block ${size === "fill" ? "w-full" : "w-32"} shrink-0`}>
-        <div className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
+      <Link to="/person/$id" params={{ id: String(item.id) }} className={`group block ${size === "fill" ? "w-full" : "w-32"} shrink-0`} onClick={(e) => markHeroPoster(e.currentTarget)}>
+        <div data-hero={`person:${item.id}`} className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
           {item.profile_path ? (
             <img src={img(item.profile_path, "w342")!} alt={titleOf(item)} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
           ) : (

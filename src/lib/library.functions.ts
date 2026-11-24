@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth-middleware";
 import * as lib from "@/server/library.server";
 // The tracked versions also note the change so Sync can send it later (see sync-changes.server.ts).
 import * as tracked from "@/server/sync-changes.server";
+// After a tick the show may move between Watchlist, Watching and Watched (see tv-status.server.ts).
+import { refreshShowStatus } from "@/server/tv-status.server";
 
 const MediaKind = z.enum(["movie", "tv"]);
 const Status = z.enum(["watching", "completed", "plan_to_watch", "dropped", "on_hold"]);
@@ -74,6 +76,7 @@ export const toggleEpisode = createServerFn({ method: "POST" })
     } else {
       tracked.trackedUnmarkEpisode(context.userId, data.tvTmdbId, data.seasonNumber, data.episodeNumber);
     }
+    await refreshShowStatus(context.userId, data.tvTmdbId);
     return { ok: true };
   });
 
@@ -97,6 +100,7 @@ export const markEpisodesUpTo = createServerFn({ method: "POST" })
       episodeNumbers,
       watchedAt: data.watchedAt,
     });
+    await refreshShowStatus(context.userId, data.tvTmdbId);
     return { ok: true, count };
   });
 

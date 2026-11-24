@@ -38,7 +38,7 @@ export const Route = createFileRoute("/api/public/trakt/callback")({
 
         try {
           const redirectUri = getRedirectUri(request.url);
-          const tokens = await exchangeCodeForTokens(code, redirectUri);
+          const tokens = await exchangeCodeForTokens(code, redirectUri, state);
           const profile = await fetchTraktUserProfile(tokens.access_token).catch(() => null);
           await saveTokensForUser(verified.userId, tokens, profile);
           return redirect("/settings/sync?trakt=connected");

@@ -6,6 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { BackCloses } from "@/lib/back-to-close";
 
 const Sheet = SheetPrimitive.Root;
 
@@ -65,6 +66,7 @@ const SheetContent = React.forwardRef<
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>
+      <BackCloses />
       {children}
     </SheetPrimitive.Content>
   </SheetPortal>

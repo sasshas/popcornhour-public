@@ -213,19 +213,17 @@
   }
 
   /* Buttons that float over a hero image (back, search, Watch trailer): clear, see-through glass. Much more
-     transparent than the normal dark pill, with a bright edge and sheen; the backdrop is darkened a touch
-     so the white icon and text stay readable over a bright picture. */
+     transparent than the normal dark pill, with a sheen; the backdrop is darkened a touch so the white icon
+     and text stay readable over a bright picture. The edge is the same single thin border as the toolbar
+     pills (Movies / TV, the category pills): it used to be a bright border plus a ring outside it plus a
+     highlight along the top, which looked thick. */
   [data-glass] .float-glass {
     background-color: oklch(1 0 0 / 0.05);
     background-image: var(--glass-sheen);
     -webkit-backdrop-filter: blur(14px) saturate(200%) brightness(0.74);
     backdrop-filter: blur(14px) saturate(200%) brightness(0.74);
-    border-color: oklch(1 0 0 / 0.38);
-    box-shadow:
-      0 0 0 1px oklch(1 0 0 / 0.38),
-      inset 0 1px 0 oklch(1 0 0 / 0.55),
-      inset 0 -1px 0 oklch(1 0 0 / 0.10),
-      0 8px 22px oklch(0 0 0 / 0.30);
+    border-color: var(--border);
+    box-shadow: 0 8px 22px oklch(0 0 0 / 0.30);
     text-shadow: 0 1px 2px oklch(0 0 0 / 0.45);
   }
   /* A faint shadow under the icon, so it still shows on a very white picture */

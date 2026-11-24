@@ -9,6 +9,7 @@ import { DetailBackdrop } from "@/components/media/DetailHero";
 import { RatingsBar } from "@/components/media/RatingsBar";
 import { CommentsList, useComments } from "@/components/media/CommentsDialog";
 import { useEpisodeWatching } from "@/hooks/use-episode-watching";
+import { markHeroPoster } from "@/lib/peek";
 
 export const Route = createFileRoute("/tv/$id/season/$seasonNumber_/episode/$episodeNumber")({
   // Like a movie page: drawn in full on the server when opened directly, but a tap inside the app changes the page
@@ -165,8 +166,8 @@ function EpisodePage() {
           <h2 className="text-lg md:text-xl font-semibold mb-3">Cast</h2>
           <div className="flex gap-3 overflow-x-auto scrollbar-none -mx-4 px-4 md:-mx-10 md:px-10 pb-1">
             {cast.map((c) => (
-              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group">
-                <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
+              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group" onClick={(e) => markHeroPoster(e.currentTarget)}>
+                <div data-hero={`person:${c.id}`} className="relative aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
                   {c.profile_path ? (
                     <img src={img(c.profile_path, "w185")!} alt={c.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                   ) : (

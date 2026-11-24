@@ -6,6 +6,9 @@ import {
   createSignedState,
   getRedirectUri,
   getTraktEnv,
+  pkceChallenge,
+  pkceVerifier,
+  usesPkce,
 } from "@/lib/trakt.server";
 
 export const Route = createFileRoute("/api/public/trakt/start")({
@@ -25,6 +28,11 @@ export const Route = createFileRoute("/api/public/trakt/start")({
         auth.searchParams.set("client_id", clientId);
         auth.searchParams.set("redirect_uri", redirectUri);
         auth.searchParams.set("state", state);
+        if (usesPkce()) {
+          // App with no client secret: Trakt requires PKCE (S256 only).
+          auth.searchParams.set("code_challenge", pkceChallenge(pkceVerifier(state)));
+          auth.searchParams.set("code_challenge_method", "S256");
+        }
 
         return new Response(null, {
           status: 302,

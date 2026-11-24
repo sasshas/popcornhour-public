@@ -38,13 +38,19 @@ export function useEpisodeWatching(tvId: number, sn: number, episodes: Episode[]
   const toggle = useMutation({
     mutationFn: (vars: { episodeNumber: number; watched: boolean; watchedAt?: string; rating?: number | null }) =>
       fetchToggle({ data: { tvTmdbId: tvId, seasonNumber: sn, ...vars } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: progressKey }),
+    onSuccess: () => refreshAfterTick(),
   });
   const markUpTo = useMutation({
     mutationFn: (vars: { throughEpisode: number; episodeNumbers: number[]; watchedAt?: string }) =>
       fetchMarkUpTo({ data: { tvTmdbId: tvId, seasonNumber: sn, ...vars } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: progressKey }),
+    onSuccess: () => refreshAfterTick(),
   });
+  // A tick can move the show between Watchlist, Watching and Watched, so the library is asked again too.
+  function refreshAfterTick() {
+    qc.invalidateQueries({ queryKey: progressKey });
+    qc.invalidateQueries({ queryKey: ["library"] });
+    qc.invalidateQueries({ queryKey: ["library-item", "tv", tvId] });
+  }
 
   const [watchOpen, setWatchOpen] = useState(false);
   const [prevOpen, setPrevOpen] = useState(false);

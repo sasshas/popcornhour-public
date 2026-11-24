@@ -1,5 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { cookiesSecure, publicUrl } from "@/server/config.server";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { cookiesSecure, publicUrl, requireEnv } from "@/server/config.server";
 import { logError, redactText } from "@/server/redact.server";
 import {
   deleteTraktConnection,
@@ -12,13 +12,44 @@ const TRAKT_OAUTH_TOKEN = "https://api.trakt.tv/oauth/token";
 const TRAKT_OAUTH_REVOKE = "https://api.trakt.tv/oauth/revoke";
 export const TRAKT_OAUTH_AUTHORIZE = "https://trakt.tv/oauth/authorize";
 
+/**
+ * TRAKT_CLIENT_SECRET is optional. Trakt stopped issuing secrets to new apps (late 2026): those
+ * sign in with PKCE instead (clientSecret null). Older apps that have a secret keep the classic flow.
+ */
 export function getTraktEnv() {
   const clientId = process.env.TRAKT_CLIENT_ID;
-  const clientSecret = process.env.TRAKT_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error("TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET not configured");
-  }
+  if (!clientId) throw new Error("TRAKT_CLIENT_ID not configured");
+  const clientSecret = process.env.TRAKT_CLIENT_SECRET?.trim() || null;
   return { clientId, clientSecret };
+}
+
+/** Only the client fields: the secret when the app has one, otherwise just the id (PKCE). */
+function clientAuth() {
+  const { clientId, clientSecret } = getTraktEnv();
+  return clientSecret
+    ? { client_id: clientId, client_secret: clientSecret }
+    : { client_id: clientId };
+}
+
+export function usesPkce() {
+  return getTraktEnv().clientSecret === null;
+}
+
+/**
+ * The PKCE code_verifier for one sign-in, derived from its signed state with the server's
+ * SESSION_SECRET, so nothing extra has to be stored. The state travels through Trakt's URL, but
+ * without the server secret the verifier can't be worked out from it. 43 base64url characters
+ * (the shortest length PKCE allows, all from its allowed set).
+ */
+export function pkceVerifier(state: string) {
+  return createHmac("sha256", requireEnv("SESSION_SECRET"))
+    .update(`trakt-pkce:${state}`)
+    .digest("base64url");
+}
+
+/** S256 code_challenge: SHA-256 of the verifier, base64url without padding. */
+export function pkceChallenge(verifier: string) {
+  return createHash("sha256").update(verifier).digest("base64url");
 }
 
 export function traktHeaders(accessToken?: string) {
@@ -37,25 +68,26 @@ export function traktHeaders(accessToken?: string) {
 
 const STATE_COOKIE = "trakt_oauth_state";
 
-function sign(payload: string, secret: string) {
-  return createHmac("sha256", secret).update(payload).digest("base64url");
+// Signed with SESSION_SECRET (it used to be the Trakt client secret, which new apps don't have).
+function sign(payload: string) {
+  return createHmac("sha256", requireEnv("SESSION_SECRET"))
+    .update(`trakt-state:${payload}`)
+    .digest("base64url");
 }
 
 export function createSignedState(userId: string) {
-  const { clientSecret } = getTraktEnv();
   const nonce = randomBytes(16).toString("base64url");
   const payload = `${userId}.${nonce}.${Date.now()}`;
-  const sig = sign(payload, clientSecret);
+  const sig = sign(payload);
   return `${payload}.${sig}`;
 }
 
 export function verifySignedState(token: string | null | undefined): { userId: string } | null {
   if (!token) return null;
-  const { clientSecret } = getTraktEnv();
   const parts = token.split(".");
   if (parts.length !== 4) return null;
   const [userId, nonce, ts, sig] = parts;
-  const expected = sign(`${userId}.${nonce}.${ts}`, clientSecret);
+  const expected = sign(`${userId}.${nonce}.${ts}`);
   try {
     if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   } catch {
@@ -88,15 +120,19 @@ export type TraktTokens = {
   scope?: string;
 };
 
-export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<TraktTokens> {
-  const { clientId, clientSecret } = getTraktEnv();
+/** `state` is the signed state of this sign-in; with PKCE its verifier is sent instead of a secret. */
+export async function exchangeCodeForTokens(
+  code: string,
+  redirectUri: string,
+  state: string,
+): Promise<TraktTokens> {
   const res = await fetch(TRAKT_OAUTH_TOKEN, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "Popcornhour/1.0" },
     body: JSON.stringify({
       code,
-      client_id: clientId,
-      client_secret: clientSecret,
+      ...clientAuth(),
+      ...(usesPkce() ? { code_verifier: pkceVerifier(state) } : {}),
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
@@ -106,15 +142,14 @@ export async function exchangeCodeForTokens(code: string, redirectUri: string): 
 }
 
 async function refreshTokens(refreshToken: string, redirectUri: string): Promise<TraktTokens> {
-  const { clientId, clientSecret } = getTraktEnv();
   const res = await fetch(TRAKT_OAUTH_TOKEN, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "Popcornhour/1.0" },
     body: JSON.stringify({
       refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
+      ...clientAuth(),
+      // PKCE apps refresh with just the id and the refresh token, as other PKCE clients do.
+      ...(usesPkce() ? {} : { redirect_uri: redirectUri }),
       grant_type: "refresh_token",
     }),
   });
@@ -156,14 +191,12 @@ export class TraktRefreshError extends Error {
 }
 
 export async function revokeToken(accessToken: string) {
-  const { clientId, clientSecret } = getTraktEnv();
   await fetch(TRAKT_OAUTH_REVOKE, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "Popcornhour/1.0" },
     body: JSON.stringify({
       token: accessToken,
-      client_id: clientId,
-      client_secret: clientSecret,
+      ...clientAuth(),
     }),
   }).catch(() => {});
 }

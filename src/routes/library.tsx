@@ -393,7 +393,7 @@ function LibraryPage() {
   const pillRows = useMemo(() => {
     // A movie is "upcoming" when it cannot be watched at home yet AND it is new. An old movie that simply is not on
     // any US service (a 1997 film, say) is not upcoming: it stays under Unwatched. The library only stores the release
-    // year, so "new" means this year or last year, or no date at all (not released yet), or a digital date still ahead.
+    // year, so "new" means this year or last year, or no date at all (not released yet); a US digital date decides on its own.
     const isUpcoming = (r: { tmdb_id: number; release_date?: string | null }) =>
       isUpcomingMovie(availMap.get(r.tmdb_id), r.release_date, cinemaCounts);
     let rows = (data ?? []).filter((r) => r.media_type === kind);

@@ -31,7 +31,7 @@ import { getDb, newId, transaction } from "./db.ts";
 import * as lib from "./library.server.ts";
 import * as lists from "./lists.server.ts";
 import * as plays from "./plays.server.ts";
-import type { LibraryItem, ListRow, MediaKind, PlayRow } from "./types.ts";
+import type { LibraryItem, LibraryStatus, ListRow, MediaKind, PlayRow } from "./types.ts";
 
 export type SyncChangeKind =
   | "watch" | "unwatch" | "unplay" | "watchlist" | "rating" | "favorite" | "status" | "list" | "list_item";
@@ -291,6 +291,23 @@ export function trackedRemoveLibraryItem(userId: string, mediaType: MediaKind, t
     const before = lib.getLibraryItem(userId, mediaType, tmdbId);
     lib.removeLibraryItem(userId, mediaType, tmdbId);
     recordLibraryDiff(userId, before, null);
+  });
+}
+
+/**
+ * A show's status worked out from its episodes (tv-status.server.ts), and the season count noted with it. Watching
+ * and Watched are the same to the services; leaving the Watchlist or Paused is queued as usual.
+ */
+export function trackedSetShowStatus(
+  userId: string,
+  tmdbId: number,
+  d: { status?: LibraryStatus; lastKnownSeasons: number },
+): void {
+  transaction(() => {
+    const before = lib.getLibraryItem(userId, "tv", tmdbId);
+    if (!before) return;
+    lib.patchTvSeasonState(before.id, { last_known_seasons: d.lastKnownSeasons, status: d.status });
+    if (d.status && d.status !== before.status) recordLibraryDiff(userId, before, lib.getLibraryItem(userId, "tv", tmdbId));
   });
 }
 

@@ -1,5 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
-import { getEpisode, getSeason, getTV } from "@/lib/tmdb.functions";
+import { getEpisode, getSeason, getTV, getTVCast } from "@/lib/tmdb.functions";
+
+/** A show's whole cast across every season (its full cast page). */
+export const tvCastQuery = (id: number) =>
+  queryOptions({ queryKey: ["tv-cast", id], queryFn: () => getTVCast({ data: { id } }), staleTime: 1000 * 60 * 30 });
 
 /** A show's details. Shared by the show page and its season and episode pages (which use its backdrop and name). */
 export const tvQuery = (id: number) =>

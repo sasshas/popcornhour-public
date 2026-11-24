@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Play, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useBackToClose } from "@/lib/back-to-close";
 
 /**
  * A button that plays a YouTube trailer over the page.
@@ -12,6 +13,8 @@ export function TrailerButton({
   youtubeKey, label = "Play trailer", compact = false, inDialog = false,
 }: { youtubeKey: string; label?: string; compact?: boolean; inDialog?: boolean }) {
   const [open, setOpen] = useState(false);
+  // The full-screen player is not a Radix popup, so it registers for Back itself (the inDialog one is a dialog).
+  useBackToClose(open && !inDialog, () => setOpen(false));
 
   useEffect(() => {
     if (!open || inDialog) return;

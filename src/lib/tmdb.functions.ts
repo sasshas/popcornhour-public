@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireUser } from "@/lib/auth-middleware";
 import type {
   MediaItem, MovieDetails, TVDetails, SeasonDetails, EpisodeDetails, PersonDetails,
 } from "./tmdb";
@@ -202,6 +203,80 @@ async function matchTmdbMovie(slug: string, title: string, yearHint: number | nu
   return id;
 }
 
+/** The TMDB movie a whentostream calendar entry is, by its title and year (see matchTmdbMovie). */
+async function matchWtsEntry(e: { slug: string; details: { title: string; year: number | null; theaterDate: string | null } | null }) {
+  const { titleFromSlug } = await import("@/server/whentostream.server");
+  const slugYear = Number(/-((?:19|20)\d{2})$/.exec(e.slug)?.[1]) || null;
+  const title = e.details?.title ?? titleFromSlug(e.slug);
+  const hint = e.details?.theaterDate ? Number(e.details.theaterDate.slice(0, 4)) : (e.details?.year ?? slugYear);
+  return matchTmdbMovie(e.slug, title, hint);
+}
+
+/**
+ * US home release dates (YYYY-MM-DD) from whentostream.com's streaming calendars for last month, this month and next
+ * month, by TMDB id: the fallback for films TMDB has no digital date for (it often has none for smaller films, e.g.
+ * "The Last Temptation of Becky"). A film's date is the earliest it is listed under, or its VOD/SVOD date if earlier.
+ * The same month pages the Calendar reads (kept in memory by getWtsMonth); this map is rebuilt every 3 hours, and
+ * while it is rebuilt the previous one is used.
+ */
+const WTS_HOME_TTL_MS = 3 * 60 * 60 * 1000;
+let wtsHome: { at: number; dates: Map<number, string> } | null = null;
+let wtsHomeBuilding: Promise<Map<number, string>> | null = null;
+
+async function buildWtsHomeDates(): Promise<{ dates: Map<number, string>; complete: boolean }> {
+  const { getWtsMonth, mapLimit } = await import("@/server/whentostream.server");
+  const now = new Date();
+  const dates = new Map<number, string>();
+  let complete = true;
+  for (const step of [-1, 0, 1]) {
+    const m = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + step, 1));
+    const entries = await getWtsMonth("streaming", m.getUTCFullYear(), m.getUTCMonth() + 1);
+    if (!entries) {
+      // Next month's calendar is often not up yet; any other month missing means the site could not be read.
+      if (step !== 1) complete = false;
+      continue;
+    }
+    const bySlug = new Map<string, { entry: (typeof entries)[number]; date: string }>();
+    for (const e of entries) {
+      const date = [e.day, e.details?.vodDate, e.details?.svodDate]
+        .filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d))
+        .sort()[0];
+      if (!date) continue;
+      const had = bySlug.get(e.slug);
+      if (!had || date < had.date) bySlug.set(e.slug, { entry: had?.entry ?? e, date });
+    }
+    await mapLimit([...bySlug.values()], 6, async ({ entry, date }) => {
+      const match = await matchWtsEntry(entry);
+      if (!match) return;
+      const had = dates.get(match.id);
+      if (!had || date < had) dates.set(match.id, date);
+    });
+  }
+  return { dates, complete };
+}
+
+/**
+ * The whentostream home dates, waiting at most `waitMs` for a first build (null when it is not ready by then; it keeps
+ * building for the next request). A build that could not read the site is retried after 10 minutes.
+ */
+export async function getWtsHomeDates(waitMs: number): Promise<Map<number, string> | null> {
+  const fresh = wtsHome && Date.now() - wtsHome.at < WTS_HOME_TTL_MS;
+  if (fresh) return wtsHome!.dates;
+  if (!wtsHomeBuilding) {
+    wtsHomeBuilding = buildWtsHomeDates()
+      .then(({ dates, complete }) => {
+        wtsHome = { at: complete ? Date.now() : Date.now() - WTS_HOME_TTL_MS + 10 * 60 * 1000, dates };
+        return dates;
+      })
+      .finally(() => {
+        wtsHomeBuilding = null;
+      });
+  }
+  if (wtsHome) return wtsHome.dates; // stale, while the new one builds
+  const building = wtsHomeBuilding.catch(() => null);
+  return Promise.race([building, new Promise<null>((r) => setTimeout(() => r(null), waitMs))]);
+}
+
 /**
  * One month of whentostream.com's calendar (streaming or in-theaters), with each movie's details and, where a
  * confident match exists, its TMDB id. `available: false` when the site has no calendar for that month.
@@ -223,12 +298,9 @@ export const getWhenToStreamMonth = createServerFn({ method: "GET" })
 
     const bySlug = new Map<string, (typeof entries)[number]>();
     for (const e of entries) if (!bySlug.has(e.slug)) bySlug.set(e.slug, e);
-    const slugYear = (slug: string) => Number(/-((?:19|20)\d{2})$/.exec(slug)?.[1]) || null;
     const ids = new Map<string, WtsMatch | null>();
     await mapLimit([...bySlug.values()], 6, async (e) => {
-      const title = e.details?.title ?? titleFromSlug(e.slug);
-      const hint = e.details?.theaterDate ? Number(e.details.theaterDate.slice(0, 4)) : (e.details?.year ?? slugYear(e.slug));
-      ids.set(e.slug, await matchTmdbMovie(e.slug, title, hint));
+      ids.set(e.slug, await matchWtsEntry(e));
     });
 
     return {
@@ -375,6 +447,34 @@ export const getTV = createServerFn({ method: "GET" })
     return tmdb<TVDetails>(`/tv/${data.id}`, {
       append_to_response: "credits,videos,recommendations,content_ratings,external_ids,reviews",
     });
+  });
+
+/** One person on a cast page: who they play and, for a show, in how many episodes. */
+export type CastEntry = { id: number; name: string; profile_path: string | null; character: string; episodes?: number };
+
+/**
+ * A show's whole cast, from every season (the show page's `credits` only has the latest season's regulars), in
+ * TMDB's order (most episodes first). Someone who played several parts has them joined with " / ".
+ */
+export const getTVCast = createServerFn({ method: "GET" })
+  .inputValidator((d: unknown) => z.object({ id: z.number().int().positive() }).parse(d))
+  .handler(async ({ data }): Promise<CastEntry[]> => {
+    const res = await tmdb<{
+      cast?: {
+        id: number;
+        name: string;
+        profile_path: string | null;
+        roles?: { character?: string; episode_count?: number }[];
+        total_episode_count?: number;
+      }[];
+    }>(`/tv/${data.id}/aggregate_credits`);
+    return (res.cast ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      profile_path: c.profile_path,
+      character: [...new Set((c.roles ?? []).map((r) => r.character?.trim() ?? "").filter(Boolean))].join(" / "),
+      episodes: c.total_episode_count,
+    }));
   });
 
 export const getWatchProviders = createServerFn({ method: "GET" })
@@ -763,8 +863,17 @@ export const getPerson = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ id: z.number().int().positive() }).parse(d))
   .handler(async ({ data }) => {
     return tmdb<PersonDetails>(`/person/${data.id}`, {
-      append_to_response: "combined_credits",
+      append_to_response: "combined_credits,external_ids",
     });
+  });
+
+/** A person's English Wikipedia address (null: they have none; undefined: Wikidata couldn't be reached). */
+export const getPersonWiki = createServerFn({ method: "GET" })
+  .middleware([requireUser])
+  .inputValidator((d: unknown) => z.object({ wikidataId: z.string().regex(/^Q\d+$/) }).parse(d))
+  .handler(async ({ data }) => {
+    const { getPersonWikiUrl } = await import("@/server/wiki-person.server");
+    return (await getPersonWikiUrl(data.wikidataId)) ?? null;
   });
 
 type ProvidersResponse = { results: Record<string, ProviderRegion> };
@@ -813,6 +922,18 @@ async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => P
 
 const SCORE_TTL_MS = 24 * 60 * 60 * 1000;
 const AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * A movie not watchable yet whose US digital date is from a day ahead to a week back is checked again after an hour,
+ * not six: TMDB copies JustWatch's services with a delay, so they tend to appear around then, and the Watched popup /
+ * movie page should show them soon after they do.
+ */
+const AVAILABILITY_SOON_TTL_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+function availabilityTtl(a: { available: boolean; digitalDate: string | null }, now = Date.now()): number {
+  if (a.available || !a.digitalDate) return AVAILABILITY_TTL_MS;
+  const d = Date.parse(a.digitalDate);
+  return d <= now + DAY_MS && d >= now - 7 * DAY_MS ? AVAILABILITY_SOON_TTL_MS : AVAILABILITY_TTL_MS;
+}
 /** With no digital date known, how long after the US cinema release a buy-only listing still counts as a pre-order. */
 const PREORDER_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -953,7 +1074,7 @@ export const getMoviesAvailability = createServerFn({ method: "POST" })
     // "avail4": answers saved under older names counted (some) pre-orders as available, and "avail" had no cinema date,
     // so they are not reused.
     const keyOf = (id: number) => `avail4:movie:${id}`;
-    const cached = getCachedMany<Answer>(data.ids.map(keyOf), AVAILABILITY_TTL_MS);
+    const cached = getCachedMany<Answer>(data.ids.map(keyOf), (a) => availabilityTtl(a));
     const fetched: [string, Answer][] = [];
 
     const out = await mapPool(data.ids, 8, async (id): Promise<MovieAvailability> => {
@@ -975,13 +1096,25 @@ export const getMoviesAvailability = createServerFn({ method: "POST" })
             .filter((r) => r.type === type && r.release_date)
             .map((r) => r.release_date)
             .sort()[0] ?? null;
-        const digitalDate = earliest(4);
+        let digitalDate: string | null = earliest(4);
         const cinemaDate = earliest(3) ?? earliest(2); // the wide release; a limited one only when there is no wide one
         // JustWatch lists pre-orders under "buy", so a film that is only up for buying before its digital release cannot
         // be watched yet. With no digital date known, a buy-only listing within PREORDER_WINDOW_MS of the US cinema
         // release (or before it) is taken as a pre-order too: films rarely go on sale at home that soon. Streaming,
         // rental or free listings still count, since those can be watched now.
         const watchNow = [us?.flatrate, us?.rent, us?.free, us?.ads].some((l) => !!l?.length);
+        // No US digital date on TMDB and nothing to watch yet: whentostream's date, for a film from this year or last
+        // year (or with no date at all). If its calendars are still being read, the answer is not cached.
+        let wtsPending = false;
+        if (!digitalDate && !watchNow) {
+          const anyDate = (releases.results ?? []).flatMap((r) => r.release_dates.map((d) => d.release_date)).sort()[0];
+          const year = anyDate ? Number(anyDate.slice(0, 4)) : null;
+          if (!year || year >= new Date().getFullYear() - 1) {
+            const wts = await getWtsHomeDates(8000);
+            if (wts) digitalDate = wts.get(id) ?? null;
+            else wtsPending = true;
+          }
+        }
         const preOrder =
           !!us?.buy?.length &&
           !watchNow &&
@@ -990,7 +1123,7 @@ export const getMoviesAvailability = createServerFn({ method: "POST" })
             : !!cinemaDate && Date.now() < Date.parse(cinemaDate) + PREORDER_WINDOW_MS);
         const available = watchNow || (!!us?.buy?.length && !preOrder);
         const answer: Answer = { available, digitalDate, cinemaDate };
-        if (releasesOk) fetched.push([keyOf(id), answer]); // never cache a half-answer
+        if (releasesOk && !wtsPending) fetched.push([keyOf(id), answer]); // never cache a half-answer
         return { tmdbId: id, ...answer };
       } catch {
         return { tmdbId: id, available: false, digitalDate: null, cinemaDate: null };

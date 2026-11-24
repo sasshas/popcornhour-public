@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth-middleware";
 import * as plays from "@/server/plays.server";
 import { trackedAddPlay, trackedRemoveAllPlays, trackedRemovePlay } from "@/server/sync-changes.server";
+import { refreshShowStatus, showOfPlay } from "@/server/tv-status.server";
 
 const MediaKind = z.enum(["movie", "tv"]);
 
@@ -34,7 +35,9 @@ export const removePlay = createServerFn({ method: "POST" })
   .middleware([requireUser])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    trackedRemovePlay(context.userId, data.id);
+    const show = showOfPlay(context.userId, data.id);
+    trackedRemovePlay(context.userId, data.id); // the last play of an episode unticks it
+    if (show) await refreshShowStatus(context.userId, show);
     return { ok: true };
   });
 
@@ -43,5 +46,7 @@ export const removeAllPlays = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => filterSchema.parse(d))
   .handler(async ({ data, context }) => {
     trackedRemoveAllPlays(context.userId, data);
+    // An episode's or a season's plays: ticks went. (A whole show's leaves the library, so there is nothing to move.)
+    if (data.mediaType === "tv" && data.seasonNumber != null) await refreshShowStatus(context.userId, data.tmdbId);
     return { ok: true };
   });

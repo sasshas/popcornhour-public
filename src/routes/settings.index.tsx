@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronRight, Palette, RefreshCw, Save, User, Wrench, type LucideIcon } from "lucide-react";
+import { Bell, ChevronRight, Palette, RefreshCw, Save, User, Wrench, type LucideIcon } from "lucide-react";
 
 export const Route = createFileRoute("/settings/")({ component: SettingsMenu });
 
@@ -7,6 +7,7 @@ const SECTIONS: { to: string; icon: LucideIcon; title: string; hint: string }[] 
   { to: "/settings/account", icon: User, title: "Account", hint: "Your name in the app, and signing out" },
   { to: "/settings/appearance", icon: Palette, title: "Appearance", hint: "Liquid glass, titles under posters, colour" },
   { to: "/settings/sync", icon: RefreshCw, title: "Sync", hint: "Trakt and WeTrakr: import and send your changes" },
+  { to: "/settings/notifications", icon: Bell, title: "Notifications", hint: "Tells your phone when a watchlist movie comes out" },
   { to: "/settings/backup", icon: Save, title: "Backup", hint: "Copies of your library saved on your server" },
   { to: "/settings/maintenance", icon: Wrench, title: "Library maintenance", hint: "Fix missing artwork" },
 ];

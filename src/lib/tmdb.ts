@@ -171,6 +171,7 @@ export interface PersonDetails {
   place_of_birth: string | null;
   profile_path: string | null;
   known_for_department: string | null;
+  external_ids?: { imdb_id?: string | null; wikidata_id?: string | null };
   combined_credits?: {
     cast: (MediaItem & { character?: string; episode_count?: number })[];
     crew: (MediaItem & { job?: string; department?: string; episode_count?: number })[];

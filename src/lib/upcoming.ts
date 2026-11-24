@@ -7,10 +7,21 @@
 /** A movie's US availability, as `getMoviesAvailability` answers it. */
 export type Availability = { available: boolean; digitalDate: string | null; cinemaDate: string | null };
 
+/** Today's date on this device as YYYY-MM-DD (local time, not UTC, so it matches the day you see). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * `releaseDate`: what is known of the movie's release, a full date or just the year ("2026"); "new" means this year
- * or last year, no date at all (not released yet), or a digital date still ahead.
+ * or last year, or no date at all (not released yet).
  * `cinemaCounts`: Filters > "Released means" (Anywhere = on): a movie that has opened in cinemas counts as out.
+ *
+ * A US digital (home) date decides on its own: still ahead = upcoming; today or past = out, even when no service is
+ * listed yet. The services come from TMDB, which copies JustWatch's list with a delay of up to a day or so, so a film
+ * out at home today can show no service for a while; it is not kept on Upcoming for that. "Today" is this device's day,
+ * as the movie page's "Streaming from <date>" line.
  */
 export function isUpcomingMovie(
   a: Availability | undefined,
@@ -18,9 +29,8 @@ export function isUpcomingMovie(
   cinemaCounts: boolean,
 ): boolean {
   if (!a || a.available) return false;
-  const now = Date.now();
-  if (cinemaCounts && a.cinemaDate && Date.parse(a.cinemaDate) <= now) return false;
-  if (a.digitalDate && Date.parse(a.digitalDate) > now) return true;
+  if (cinemaCounts && a.cinemaDate && Date.parse(a.cinemaDate) <= Date.now()) return false;
+  if (a.digitalDate) return a.digitalDate.slice(0, 10) > todayLocal();
   const year = parseInt((releaseDate ?? "").slice(0, 4), 10);
   return Number.isNaN(year) || year >= new Date().getFullYear() - 1;
 }

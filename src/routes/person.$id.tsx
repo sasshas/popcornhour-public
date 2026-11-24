@@ -2,12 +2,14 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useQuery, queryOptions } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Cake, Calendar, Flame, MapPin, Star, Type, User } from "lucide-react";
-import { getPerson } from "@/lib/tmdb.functions";
+import { getPerson, getPersonWiki } from "@/lib/tmdb.functions";
+import wikipediaIcon from "@/assets/links/wikipedia.svg";
 import { PosterCard } from "@/components/media/PosterCard";
 import { LoadMore } from "@/components/media/LoadMore";
 import { ReadMore } from "@/components/media/ReadMore";
 import { img, titleOf, type MediaItem, type PersonDetails } from "@/lib/tmdb";
 import { formatDateAULong } from "@/lib/utils";
+import { HERO_POSTER } from "@/lib/peek";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -139,6 +141,15 @@ function sortCredits(list: Credit[], { key, dir }: SortChoice): Credit[] {
   });
 }
 
+/** Movies, shows, or both. Only offered for someone with credits of both kinds. */
+type Kind = "all" | "movie" | "tv";
+const KINDS: { value: Kind; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "movie", label: "Movies" },
+  { value: "tv", label: "Shows" },
+];
+const ofKind = (list: Credit[], kind: Kind) => (kind === "all" ? list : list.filter((c) => c.media_type === kind));
+
 /** Posters drawn at a time (as in the Library): about ten rows on a phone. The next lot is drawn as you near the end. */
 const PAGE_SIZE = 30;
 
@@ -147,7 +158,14 @@ const PAGE_SIZE = 30;
  * Opening a movie from here and coming Back puts back the same line of work, order and number of posters, so the
  * router can return you to where you had scrolled. Only ever written in the browser (inside an effect).
  */
-let lastView: { personId: number; entry: string | undefined; dept: string; sort: SortChoice; more: { key: string; n: number } } | null = null;
+let lastView: {
+  personId: number;
+  entry: string | undefined;
+  dept: string;
+  kind: Kind;
+  sort: SortChoice;
+  more: { key: string; n: number };
+} | null = null;
 
 /** The router's id for the browser-history entry now showing. */
 function historyEntry(): string | undefined {
@@ -183,12 +201,42 @@ function Biography({ text }: { text: string }) {
   );
 }
 
+/**
+ * Opens the person's English Wikipedia article in a new tab. The exact article comes through the Wikidata item TMDB
+ * records for them (looked up alongside the page); until that answers, Wikidata's own jump to the article is used.
+ * Someone with no Wikidata item, or no English article, gets a Wikipedia search for their name instead.
+ */
+function WikiButton({ name, wikidataId }: { name: string; wikidataId: string | null }) {
+  const { data: article } = useQuery({
+    queryKey: ["person-wiki", wikidataId],
+    queryFn: () => getPersonWiki({ data: { wikidataId: wikidataId! } }),
+    enabled: !!wikidataId,
+    staleTime: Infinity,
+  });
+  const search = `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`;
+  const href =
+    article ?? (wikidataId && article === undefined ? `https://www.wikidata.org/wiki/Special:GoToLinkedPage/enwiki/${wikidataId}` : search);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-border pl-1 pr-3 py-1 text-xs font-medium text-foreground hover:border-primary/50"
+    >
+      <img src={wikipediaIcon} alt="" className="size-5 rounded-full" />
+      Wikipedia
+    </a>
+  );
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Page
 
 // The wide picture across the top: a still from the title they are best known for. Same files as a movie page's.
 const BACKDROP_BOX = "relative aspect-[16/10] md:aspect-[21/9] max-h-[460px] overflow-hidden bg-surface";
-const PHOTO_BOX = "w-28 md:w-48 aspect-[2/3] shrink-0 rounded-2xl ring-1 ring-border shadow-2xl";
+// The photo takes part in the page-change animation: a tapped cast photo grows into it, and Back shrinks it again (peek.ts).
+const HERO_STYLE = { viewTransitionName: HERO_POSTER };
+const PHOTO_BOX ="w-28 md:w-48 aspect-[2/3] shrink-0 rounded-2xl ring-1 ring-border shadow-2xl";
 const HEAD_ROW = "px-4 md:px-10 -mt-20 md:-mt-40 relative flex flex-row items-end gap-4 md:gap-8";
 const FADE = "absolute inset-0 bg-gradient-to-t from-background from-0% via-background/60 via-40% to-background/10";
 
@@ -226,19 +274,34 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
       /* not saved; still applies now */
     }
   };
-  const dept = depts.find((d) => d.name === deptName) ?? depts[0];
+  // Movies / Shows: a fresh visit to a person starts on All. The switch is only there when they have both kinds.
+  const [kind, setKind] = useState<Kind>(returning?.kind ?? "all");
+  const hasBoth = useMemo(() => {
+    const all = depts.flatMap((d) => d.credits);
+    return all.some((c) => c.media_type === "movie") && all.some((c) => c.media_type === "tv");
+  }, [depts]);
+  const shownKind = hasBoth ? kind : "all";
+  // The lines of work with something of that kind (Movies hides one they only did on shows), with their counts.
+  const kindDepts = useMemo(
+    () => depts.map((d) => ({ name: d.name, credits: ofKind(d.credits, shownKind) })).filter((d) => d.credits.length > 0),
+    [depts, shownKind],
+  );
+  const dept = kindDepts.find((d) => d.name === deptName) ?? kindDepts[0];
+  // The counts on Movies / Shows are for the line of work showing. A kind it has none of can't be picked.
+  const fullDept = depts.find((d) => d.name === dept?.name);
+  const kindCount = (k: Kind) => (fullDept ? ofKind(fullDept.credits, k).length : 0);
   const sorted = useMemo(() => (dept ? sortCredits(dept.credits, sort) : []), [dept, sort]);
 
-  // How many posters are drawn, for one view only: another line of work or order starts again at one page.
-  const viewKey = `${dept?.name}|${sort.key}|${sort.dir}`;
+  // How many posters are drawn, for one view only: another line of work, kind or order starts again at one page.
+  const viewKey = `${dept?.name}|${shownKind}|${sort.key}|${sort.dir}`;
   const [more, setMore] = useState<{ key: string; n: number }>(returning?.more ?? { key: "", n: PAGE_SIZE });
   const shownCount = more.key === viewKey ? more.n : PAGE_SIZE;
   const showMore = useCallback(() => setMore({ key: viewKey, n: shownCount + PAGE_SIZE }), [viewKey, shownCount]);
   const ownEntry = useRef<string | undefined>(undefined);
   useEffect(() => {
     ownEntry.current ??= historyEntry();
-    lastView = { personId: p.id, entry: ownEntry.current, dept: dept?.name ?? "", sort, more };
-  }, [p.id, dept, sort, more]);
+    lastView = { personId: p.id, entry: ownEntry.current, dept: dept?.name ?? "", kind, sort, more };
+  }, [p.id, dept, kind, sort, more]);
 
   const activeSort = SORTS.find((s) => s.value === sort.key)!;
   const age = p.birthday ? yearsBetween(p.birthday, p.deathday) : null;
@@ -262,9 +325,9 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
         </div>
         <div className={HEAD_ROW}>
           {p.profile_path ? (
-            <img src={img(p.profile_path, "w342")!} alt={p.name} className={`${PHOTO_BOX} object-cover bg-surface`} />
+            <img src={img(p.profile_path, "w342")!} alt={p.name} style={HERO_STYLE} className={`${PHOTO_BOX} object-cover bg-surface`} />
           ) : (
-            <div className={`${PHOTO_BOX} grid place-items-center bg-surface text-muted-foreground`}>
+            <div style={HERO_STYLE} className={`${PHOTO_BOX} grid place-items-center bg-surface text-muted-foreground`}>
               <User className="size-10" />
             </div>
           )}
@@ -298,6 +361,9 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
                   <span className="line-clamp-2">{p.place_of_birth}</span>
                 </p>
               )}
+            </div>
+            <div className="pt-1 md:pt-0">
+              <WikiButton name={p.name} wikidataId={wikidataOf(p)} />
             </div>
           </div>
         </div>
@@ -347,7 +413,7 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
           {depts.length > 1 && (
             <div className="-mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto scrollbar-none">
               <div className="inline-flex bg-surface border border-border rounded-full p-1" role="group" aria-label="Line of work">
-                {depts.map((d) => (
+                {kindDepts.map((d) => (
                   <button
                     key={d.name}
                     onClick={() => setDeptName(d.name)}
@@ -365,6 +431,31 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
             </div>
           )}
 
+          {/* All / Movies / Shows, with how many of each in the line of work showing. */}
+          {hasBoth && (
+            <div className="inline-flex bg-surface border border-border rounded-full p-0.5" role="group" aria-label="Movies or shows">
+              {KINDS.map((k) => {
+                const n = kindCount(k.value);
+                const on = shownKind === k.value;
+                return (
+                  <button
+                    key={k.value}
+                    onClick={() => setKind(k.value)}
+                    disabled={n === 0}
+                    aria-pressed={on}
+                    className={[
+                      "px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap disabled:opacity-40",
+                      on ? "bg-primary text-primary-foreground" : "text-muted-foreground enabled:hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {k.label}
+                    <span className={`ml-1 ${on ? "opacity-80" : "opacity-60"}`}>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6">
             {sorted.slice(0, shownCount).map((c) => (
               <CreditTile key={c.key} credit={c} />
@@ -378,6 +469,12 @@ function PersonDetailsView({ p }: { p: PersonDetails }) {
   );
 }
 
+/** The person's Wikidata item ("Q2263"), when TMDB has a well-formed one. */
+function wikidataOf(p: PersonDetails): string | null {
+  const q = p.external_ids?.wikidata_id;
+  return typeof q === "string" && /^Q\d+$/.test(q) ? q : null;
+}
+
 const BAR = "rounded-full bg-surface animate-pulse";
 
 /** Shown the moment a person is tapped, until their details arrive: the same boxes as the real page. */
@@ -389,7 +486,7 @@ function PersonSkeleton() {
           <div className={FADE} />
         </div>
         <div className={HEAD_ROW}>
-          <div className={`${PHOTO_BOX} bg-surface animate-pulse`} />
+          <div style={HERO_STYLE} className={`${PHOTO_BOX} bg-surface animate-pulse`} />
           <div className="min-w-0 flex-1 space-y-3 pb-1">
             <div className={`${BAR} h-7 md:h-12 w-3/4`} />
             <div className={`${BAR} h-4 w-1/2`} />

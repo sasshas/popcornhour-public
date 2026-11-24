@@ -5,8 +5,15 @@ import { getDb, nowIso, transaction } from "./db.ts";
 
 const CHUNK = 500; // keeps each IN (...) well under SQLite's variable limit
 
-/** Cached values younger than `ttlMs`, by key. Keys that are missing, expired or unreadable are left out. */
-export function getCachedMany<T>(keys: string[], ttlMs: number, now = Date.now()): Map<string, T> {
+/**
+ * Cached values younger than `ttlMs`, by key. Keys that are missing, expired or unreadable are left out. `ttlMs` can
+ * be a function of the value, for answers that should be checked again sooner (see getMoviesAvailability).
+ */
+export function getCachedMany<T>(
+  keys: string[],
+  ttlMs: number | ((value: T) => number),
+  now = Date.now(),
+): Map<string, T> {
   const out = new Map<string, T>();
   const db = getDb();
   for (let i = 0; i < keys.length; i += CHUNK) {
@@ -15,9 +22,11 @@ export function getCachedMany<T>(keys: string[], ttlMs: number, now = Date.now()
       .prepare(`SELECT key, data, fetched_at FROM tmdb_cache WHERE key IN (${part.map(() => "?").join(",")})`)
       .all(...part) as { key: string; data: string; fetched_at: string }[];
     for (const r of rows) {
-      if (now - Date.parse(r.fetched_at) > ttlMs) continue;
       try {
-        out.set(r.key, JSON.parse(r.data) as T);
+        const value = JSON.parse(r.data) as T;
+        const ttl = typeof ttlMs === "function" ? ttlMs(value) : ttlMs;
+        if (now - Date.parse(r.fetched_at) > ttl) continue;
+        out.set(r.key, value);
       } catch {
         // unreadable: treated as a miss and overwritten on the next save
       }

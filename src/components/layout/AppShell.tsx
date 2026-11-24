@@ -81,7 +81,7 @@ function ShowHomeButton({ id, className }: { id: string; className: string }) {
 
 // The round buttons that float over a page's hero image on a phone.
 const FLOAT_PILL =
-  "float-glass pointer-events-auto transform-gpu will-change-transform grid size-10 place-items-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-md transition active:scale-95";
+  "float-glass pointer-events-auto transform-gpu will-change-transform grid size-10 place-items-center rounded-full bg-black/45 text-white border border-white/15 backdrop-blur-md transition active:scale-95";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { location } = useRouterState();

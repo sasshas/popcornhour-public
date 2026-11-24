@@ -45,6 +45,10 @@ export function getDb(): Database.Database {
   _db = db;
   // The daily backup timer starts with the database. Imported lazily: backup.server.ts imports this file.
   void import("./backup.server.ts").then((m) => m.startBackupScheduler()).catch(() => {});
+  // So does the daily release-notification check (it only does anything once HA_WEBHOOK_URL is set).
+  void import("./release-notify.server.ts").then((m) => m.startReleaseNotifyScheduler()).catch(() => {});
+  // And the daily look at every show's Watching / Watched status (new episodes airing, imported shows).
+  void import("./tv-status.server.ts").then((m) => m.startShowStatusScheduler()).catch(() => {});
   return db;
 }
 

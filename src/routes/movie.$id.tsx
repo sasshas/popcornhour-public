@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, queryOptions } from "@tanstack/react-query";
-import { peekOf } from "@/lib/peek";
-import { getDistributor, getMovie } from "@/lib/tmdb.functions";
+import { useQuery } from "@tanstack/react-query";
+import { markHeroPoster, peekOf } from "@/lib/peek";
+import { getDistributor } from "@/lib/tmdb.functions";
 import { MediaRail } from "@/components/media/MediaRail";
 import { img, formatRuntime, type MovieDetails } from "@/lib/tmdb";
 import { displayName, formatDateAULong } from "@/lib/utils";
@@ -16,9 +16,9 @@ import { ParentsGuide } from "@/components/media/ParentsGuide";
 import { DetailBackdrop, DetailPoster, DetailSkeleton } from "@/components/media/DetailHero";
 import { ReleasesDialog, countReleaseCountries, type ReleaseDates } from "@/components/media/ReleasesDialog";
 import { useState } from "react";
-
-const movieQuery = (id: number) =>
-  queryOptions({ queryKey: ["movie", id], queryFn: () => getMovie({ data: { id } }), staleTime: 1000 * 60 * 30 });
+import { movieQuery } from "@/lib/movie-query";
+import { SeeAllCast } from "@/components/media/CastGrid";
+import { FullPlotButton } from "@/components/media/FullPlot";
 
 export const Route = createFileRoute("/movie/$id")({
   // A page opened directly is drawn on the server, which waits for the details. A tap inside the app does not wait:
@@ -229,7 +229,10 @@ function MoviePage() {
       </header>
 
       <section className="px-4 md:px-10 max-w-4xl">
-        <h2 className="text-lg font-semibold mb-2">Overview</h2>
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <h2 className="text-lg font-semibold">Overview</h2>
+          <FullPlotButton tmdbId={m.id} imdbId={m.imdb_id ?? null} title={m.title || "Untitled"} year={m.release_date?.slice(0, 4) || null} />
+        </div>
         <p className="text-muted-foreground leading-relaxed">{m.overview || "No overview available."}</p>
       </section>
 
@@ -241,11 +244,15 @@ function MoviePage() {
 
       {m.credits?.cast && m.credits.cast.length > 0 && (
         <div className="px-4 md:px-10">
-          <h2 className="text-lg md:text-xl font-semibold mb-3">Top cast</h2>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <h2 className="text-lg md:text-xl font-semibold">Top cast</h2>
+            {/* Only when there are more than the row shows. */}
+            {m.credits.cast.length > 20 && <SeeAllCast type="movie" id={m.id} />}
+          </div>
           <div className="flex gap-3 overflow-x-auto scrollbar-none -mx-4 px-4 md:-mx-10 md:px-10 pb-1">
             {m.credits.cast.slice(0, 20).map((c) => (
-              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group">
-                <div className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
+              <Link key={c.id} to="/person/$id" params={{ id: String(c.id) }} className="w-28 shrink-0 group" onClick={(e) => markHeroPoster(e.currentTarget)}>
+                <div data-hero={`person:${c.id}`} className="aspect-[2/3] rounded-xl overflow-hidden bg-surface ring-1 ring-border">
                   {c.profile_path ? (
                     <img src={img(c.profile_path, "w185")!} alt={c.name} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                   ) : <div className="w-full h-full grid place-items-center text-xs text-muted-foreground">No photo</div>}

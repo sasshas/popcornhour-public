@@ -1,19 +1,34 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { searchMulti } from "@/lib/tmdb.functions";
 import { PosterCard } from "@/components/media/PosterCard";
 import { Search as SearchIcon } from "lucide-react";
 
+// The search is kept in the address (?q=), so Back from a result comes back to the same search, with the results
+// drawn at once from the Query cache (and the scroll place restored). The Search tab opens a new, empty search.
+type SearchParams = { q?: string };
+
 export const Route = createFileRoute("/search")({
+  validateSearch: (s: Record<string, unknown>): SearchParams => ({
+    q: typeof s.q === "string" && s.q.trim() ? s.q.slice(0, 200) : undefined,
+  }),
   head: () => ({ meta: [{ title: "Search — Popcornhour" }, { name: "description", content: "Search movies, TV shows, and people." }] }),
   component: SearchPage,
 });
 
 function SearchPage() {
-  const [q, setQ] = useState("");
-  const [debounced, setDebounced] = useState("");
+  const { q: kept = "" } = Route.useSearch();
+  const navigate = useNavigate({ from: "/search" });
+  const [q, setQ] = useState(kept);
+  const [debounced, setDebounced] = useState(kept.trim());
   useEffect(() => { const t = setTimeout(() => setDebounced(q.trim()), 250); return () => clearTimeout(t); }, [q]);
+  // Write the search into the address as it settles. Replace, not push: typing must not add a Back step per word.
+  // viewTransition false: the page stays the same, so the page-change fade must not play.
+  useEffect(() => {
+    if (debounced === kept.trim()) return;
+    void navigate({ search: { q: debounced || undefined }, replace: true, resetScroll: false, viewTransition: false });
+  }, [debounced, kept, navigate]);
 
   const { data, isFetching } = useQuery({
     queryKey: ["search", debounced],
@@ -32,7 +47,8 @@ function SearchPage() {
       <label className="relative block max-w-2xl">
         <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
         <input
-          autoFocus
+          // Only a new search puts the cursor in the box: coming Back to results must not pop the keyboard up.
+          autoFocus={!kept}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Try 'Dune', 'Severance', 'Florence Pugh'…"

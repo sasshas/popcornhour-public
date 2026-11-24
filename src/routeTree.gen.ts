@@ -27,14 +27,19 @@ import { Route as SettingsAccountRouteImport } from './routes/settings.account'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as SettingsBackupRouteImport } from './routes/settings.backup'
 import { Route as SettingsMaintenanceRouteImport } from './routes/settings.maintenance'
+import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsSyncRouteImport } from './routes/settings.sync'
 import { Route as StudioIdRouteImport } from './routes/studio.$id'
 import { Route as TvIdRouteImport } from './routes/tv.$id'
 import { Route as ApiBackupsNameRouteImport } from './routes/api/backups.$name'
+import { Route as ApiPublicWatchedRouteImport } from './routes/api/public/watched'
+import { Route as MovieIdCastRouteImport } from './routes/movie.$id_.cast'
+import { Route as TvIdCastRouteImport } from './routes/tv.$id_.cast'
 import { Route as ApiPublicHooksCheckNewSeasonsRouteImport } from './routes/api/public/hooks/check-new-seasons'
 import { Route as ApiPublicTraktCallbackRouteImport } from './routes/api/public/trakt/callback'
 import { Route as ApiPublicTraktStartRouteImport } from './routes/api/public/trakt/start'
 import { Route as TvIdSeasonSeasonNumberRouteImport } from './routes/tv.$id.season.$seasonNumber'
+import { Route as ApiPublicListsListIdItemsRouteImport } from './routes/api/public/lists/$listId.items'
 import { Route as TvIdSeasonSeasonNumberEpisodeEpisodeNumberRouteImport } from './routes/tv.$id.season.$seasonNumber_.episode.$episodeNumber'
 
 const IndexRoute = IndexRouteImport.update({
@@ -127,6 +132,11 @@ const SettingsMaintenanceRoute = SettingsMaintenanceRouteImport.update({
   path: '/maintenance',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsSyncRoute = SettingsSyncRouteImport.update({
   id: '/sync',
   path: '/sync',
@@ -145,6 +155,21 @@ const TvIdRoute = TvIdRouteImport.update({
 const ApiBackupsNameRoute = ApiBackupsNameRouteImport.update({
   id: '/api/backups/$name',
   path: '/api/backups/$name',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicWatchedRoute = ApiPublicWatchedRouteImport.update({
+  id: '/api/public/watched',
+  path: '/api/public/watched',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MovieIdCastRoute = MovieIdCastRouteImport.update({
+  id: '/movie/$id_/cast',
+  path: '/movie/$id/cast',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TvIdCastRoute = TvIdCastRouteImport.update({
+  id: '/tv/$id_/cast',
+  path: '/tv/$id/cast',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksCheckNewSeasonsRoute =
@@ -168,6 +193,12 @@ const TvIdSeasonSeasonNumberRoute = TvIdSeasonSeasonNumberRouteImport.update({
   path: '/season/$seasonNumber',
   getParentRoute: () => TvIdRoute,
 } as any)
+const ApiPublicListsListIdItemsRoute =
+  ApiPublicListsListIdItemsRouteImport.update({
+    id: '/api/public/lists/$listId/items',
+    path: '/api/public/lists/$listId/items',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const TvIdSeasonSeasonNumberEpisodeEpisodeNumberRoute =
   TvIdSeasonSeasonNumberEpisodeEpisodeNumberRouteImport.update({
     id: '/season/$seasonNumber_/episode/$episodeNumber',
@@ -192,16 +223,21 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/maintenance': typeof SettingsMaintenanceRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/sync': typeof SettingsSyncRoute
   '/studio/$id': typeof StudioIdRoute
   '/tv/$id': typeof TvIdRouteWithChildren
   '/lists/': typeof ListsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/backups/$name': typeof ApiBackupsNameRoute
+  '/api/public/watched': typeof ApiPublicWatchedRoute
+  '/movie/$id/cast': typeof MovieIdCastRoute
+  '/tv/$id/cast': typeof TvIdCastRoute
   '/api/public/hooks/check-new-seasons': typeof ApiPublicHooksCheckNewSeasonsRoute
   '/api/public/trakt/callback': typeof ApiPublicTraktCallbackRoute
   '/api/public/trakt/start': typeof ApiPublicTraktStartRoute
   '/tv/$id/season/$seasonNumber': typeof TvIdSeasonSeasonNumberRoute
+  '/api/public/lists/$listId/items': typeof ApiPublicListsListIdItemsRoute
   '/tv/$id/season/$seasonNumber/episode/$episodeNumber': typeof TvIdSeasonSeasonNumberEpisodeEpisodeNumberRoute
 }
 export interface FileRoutesByTo {
@@ -220,16 +256,21 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/maintenance': typeof SettingsMaintenanceRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/sync': typeof SettingsSyncRoute
   '/studio/$id': typeof StudioIdRoute
   '/tv/$id': typeof TvIdRouteWithChildren
   '/lists': typeof ListsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/api/backups/$name': typeof ApiBackupsNameRoute
+  '/api/public/watched': typeof ApiPublicWatchedRoute
+  '/movie/$id/cast': typeof MovieIdCastRoute
+  '/tv/$id/cast': typeof TvIdCastRoute
   '/api/public/hooks/check-new-seasons': typeof ApiPublicHooksCheckNewSeasonsRoute
   '/api/public/trakt/callback': typeof ApiPublicTraktCallbackRoute
   '/api/public/trakt/start': typeof ApiPublicTraktStartRoute
   '/tv/$id/season/$seasonNumber': typeof TvIdSeasonSeasonNumberRoute
+  '/api/public/lists/$listId/items': typeof ApiPublicListsListIdItemsRoute
   '/tv/$id/season/$seasonNumber/episode/$episodeNumber': typeof TvIdSeasonSeasonNumberEpisodeEpisodeNumberRoute
 }
 export interface FileRoutesById {
@@ -250,16 +291,21 @@ export interface FileRoutesById {
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/backup': typeof SettingsBackupRoute
   '/settings/maintenance': typeof SettingsMaintenanceRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/sync': typeof SettingsSyncRoute
   '/studio/$id': typeof StudioIdRoute
   '/tv/$id': typeof TvIdRouteWithChildren
   '/lists/': typeof ListsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/backups/$name': typeof ApiBackupsNameRoute
+  '/api/public/watched': typeof ApiPublicWatchedRoute
+  '/movie/$id_/cast': typeof MovieIdCastRoute
+  '/tv/$id_/cast': typeof TvIdCastRoute
   '/api/public/hooks/check-new-seasons': typeof ApiPublicHooksCheckNewSeasonsRoute
   '/api/public/trakt/callback': typeof ApiPublicTraktCallbackRoute
   '/api/public/trakt/start': typeof ApiPublicTraktStartRoute
   '/tv/$id/season/$seasonNumber': typeof TvIdSeasonSeasonNumberRoute
+  '/api/public/lists/$listId/items': typeof ApiPublicListsListIdItemsRoute
   '/tv/$id/season/$seasonNumber_/episode/$episodeNumber': typeof TvIdSeasonSeasonNumberEpisodeEpisodeNumberRoute
 }
 export interface FileRouteTypes {
@@ -281,16 +327,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/backup'
     | '/settings/maintenance'
+    | '/settings/notifications'
     | '/settings/sync'
     | '/studio/$id'
     | '/tv/$id'
     | '/lists/'
     | '/settings/'
     | '/api/backups/$name'
+    | '/api/public/watched'
+    | '/movie/$id/cast'
+    | '/tv/$id/cast'
     | '/api/public/hooks/check-new-seasons'
     | '/api/public/trakt/callback'
     | '/api/public/trakt/start'
     | '/tv/$id/season/$seasonNumber'
+    | '/api/public/lists/$listId/items'
     | '/tv/$id/season/$seasonNumber/episode/$episodeNumber'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -309,16 +360,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/backup'
     | '/settings/maintenance'
+    | '/settings/notifications'
     | '/settings/sync'
     | '/studio/$id'
     | '/tv/$id'
     | '/lists'
     | '/settings'
     | '/api/backups/$name'
+    | '/api/public/watched'
+    | '/movie/$id/cast'
+    | '/tv/$id/cast'
     | '/api/public/hooks/check-new-seasons'
     | '/api/public/trakt/callback'
     | '/api/public/trakt/start'
     | '/tv/$id/season/$seasonNumber'
+    | '/api/public/lists/$listId/items'
     | '/tv/$id/season/$seasonNumber/episode/$episodeNumber'
   id:
     | '__root__'
@@ -338,16 +394,21 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/backup'
     | '/settings/maintenance'
+    | '/settings/notifications'
     | '/settings/sync'
     | '/studio/$id'
     | '/tv/$id'
     | '/lists/'
     | '/settings/'
     | '/api/backups/$name'
+    | '/api/public/watched'
+    | '/movie/$id_/cast'
+    | '/tv/$id_/cast'
     | '/api/public/hooks/check-new-seasons'
     | '/api/public/trakt/callback'
     | '/api/public/trakt/start'
     | '/tv/$id/season/$seasonNumber'
+    | '/api/public/lists/$listId/items'
     | '/tv/$id/season/$seasonNumber_/episode/$episodeNumber'
   fileRoutesById: FileRoutesById
 }
@@ -368,9 +429,13 @@ export interface RootRouteChildren {
   TvIdRoute: typeof TvIdRouteWithChildren
   ListsIndexRoute: typeof ListsIndexRoute
   ApiBackupsNameRoute: typeof ApiBackupsNameRoute
+  ApiPublicWatchedRoute: typeof ApiPublicWatchedRoute
+  MovieIdCastRoute: typeof MovieIdCastRoute
+  TvIdCastRoute: typeof TvIdCastRoute
   ApiPublicHooksCheckNewSeasonsRoute: typeof ApiPublicHooksCheckNewSeasonsRoute
   ApiPublicTraktCallbackRoute: typeof ApiPublicTraktCallbackRoute
   ApiPublicTraktStartRoute: typeof ApiPublicTraktStartRoute
+  ApiPublicListsListIdItemsRoute: typeof ApiPublicListsListIdItemsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -501,6 +566,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsMaintenanceRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/notifications': {
+      id: '/settings/notifications'
+      path: '/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof SettingsNotificationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/sync': {
       id: '/settings/sync'
       path: '/sync'
@@ -527,6 +599,27 @@ declare module '@tanstack/react-router' {
       path: '/api/backups/$name'
       fullPath: '/api/backups/$name'
       preLoaderRoute: typeof ApiBackupsNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/watched': {
+      id: '/api/public/watched'
+      path: '/api/public/watched'
+      fullPath: '/api/public/watched'
+      preLoaderRoute: typeof ApiPublicWatchedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/movie/$id_/cast': {
+      id: '/movie/$id_/cast'
+      path: '/movie/$id/cast'
+      fullPath: '/movie/$id/cast'
+      preLoaderRoute: typeof MovieIdCastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tv/$id_/cast': {
+      id: '/tv/$id_/cast'
+      path: '/tv/$id/cast'
+      fullPath: '/tv/$id/cast'
+      preLoaderRoute: typeof TvIdCastRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/check-new-seasons': {
@@ -557,6 +650,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TvIdSeasonSeasonNumberRouteImport
       parentRoute: typeof TvIdRoute
     }
+    '/api/public/lists/$listId/items': {
+      id: '/api/public/lists/$listId/items'
+      path: '/api/public/lists/$listId/items'
+      fullPath: '/api/public/lists/$listId/items'
+      preLoaderRoute: typeof ApiPublicListsListIdItemsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tv/$id/season/$seasonNumber_/episode/$episodeNumber': {
       id: '/tv/$id/season/$seasonNumber_/episode/$episodeNumber'
       path: '/season/$seasonNumber/episode/$episodeNumber'
@@ -572,6 +672,7 @@ interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsMaintenanceRoute: typeof SettingsMaintenanceRoute
+  SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsSyncRoute: typeof SettingsSyncRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -581,6 +682,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsBackupRoute: SettingsBackupRoute,
   SettingsMaintenanceRoute: SettingsMaintenanceRoute,
+  SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsSyncRoute: SettingsSyncRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
@@ -619,9 +721,13 @@ const rootRouteChildren: RootRouteChildren = {
   TvIdRoute: TvIdRouteWithChildren,
   ListsIndexRoute: ListsIndexRoute,
   ApiBackupsNameRoute: ApiBackupsNameRoute,
+  ApiPublicWatchedRoute: ApiPublicWatchedRoute,
+  MovieIdCastRoute: MovieIdCastRoute,
+  TvIdCastRoute: TvIdCastRoute,
   ApiPublicHooksCheckNewSeasonsRoute: ApiPublicHooksCheckNewSeasonsRoute,
   ApiPublicTraktCallbackRoute: ApiPublicTraktCallbackRoute,
   ApiPublicTraktStartRoute: ApiPublicTraktStartRoute,
+  ApiPublicListsListIdItemsRoute: ApiPublicListsListIdItemsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

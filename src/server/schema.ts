@@ -273,4 +273,22 @@ AND (
   WHERE p.user_id = library_items.user_id AND p.media_type = 'movie' AND p.tmdb_id = library_items.tmdb_id
 ) > COALESCE(julianday(watched_at), 0);
 `,
+  // 10: release notifications (release-notify.server.ts). `release_notify_seen` holds each watchlist movie the daily
+  // check has looked at; `release_notify_events` what it has already told you about (or found already true the first
+  // time it saw the movie, with sent = 0), so each notification goes out once. Rows of a movie that leaves the
+  // watchlist are removed, so putting it back starts afresh.
+  `
+CREATE TABLE release_notify_seen (
+  tmdb_id INTEGER PRIMARY KEY,
+  first_checked_at TEXT NOT NULL DEFAULT ${NOW}
+);
+CREATE TABLE release_notify_events (
+  tmdb_id INTEGER NOT NULL,
+  event TEXT NOT NULL CHECK (event IN ('streaming','digital','cinema')),
+  sent INTEGER NOT NULL DEFAULT 0,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT ${NOW},
+  PRIMARY KEY (tmdb_id, event)
+);
+`,
 ];

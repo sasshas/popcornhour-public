@@ -86,7 +86,9 @@ export function CommentsDialog({ open, onOpenChange, ...source }: Props) {
   const comments = useComments(source, open);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/* Up to 90% of the screen's height (the list scrolls inside it); a short list keeps it short. Wider on a
+          computer. */}
+      <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl">
             Comments{comments.total > 0 && <span className="ml-2 text-sm font-normal text-muted-foreground">{comments.total.toLocaleString()}</span>}
@@ -115,7 +117,7 @@ export function CommentsList({ comments, scroll }: { comments: ReturnType<typeof
         ) : entries.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">No comments yet.</p>
         ) : (
-          <ul className={`space-y-3 ${scroll ? "max-h-[60vh] overflow-y-auto pr-1" : ""}`}>
+          <ul className={`space-y-3 ${scroll ? "min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" : ""}`}>
             {entries.map((r) => {
               const isOpen = expanded === r.key;
               const long = r.content.length > 320;

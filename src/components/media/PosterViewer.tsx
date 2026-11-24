@@ -2,6 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { img } from "@/lib/tmdb";
+import { BackCloses } from "@/lib/back-to-close";
 
 /**
  * The poster on a movie or show page, shown big when it is tapped. The picture grows out of the small poster and
@@ -100,6 +101,7 @@ export function PosterViewer({ path, src, alt, source, onClosed }: Props) {
           onClick={close}
         >
           <DialogPrimitive.Title className="sr-only">{alt || "Poster"}</DialogPrimitive.Title>
+          <BackCloses />
           <div
             ref={attach}
             className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-surface shadow-2xl will-change-transform"
