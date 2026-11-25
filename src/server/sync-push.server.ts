@@ -19,6 +19,7 @@ import {
 import { getLibraryItem } from "./library.server.ts";
 import { logError, logInfo, redactText } from "./redact.server.ts";
 import { readWetrakrListItems } from "./wetrakr-lists.server.ts";
+import { isUnknownWatchedAt } from "@/lib/watched-date";
 import type { ProgressEvent } from "./trakt-import.server.ts";
 
 export type { SyncService };
@@ -79,7 +80,8 @@ function addPlay(map: RemotePlays, key: string, at: string | null | undefined) {
 /** The day before the earliest episode watch waiting to be sent: plays since then are enough to spot repeats. */
 function earliestEpisodeDay(changes: SyncChange[]): string | null {
   const times = changes
-    .filter((c) => c.kind === "watch" && isEpisode(c) && c.watched_at)
+    // A watch with no date (kept as 1970) is left out, or the whole episode history would be read.
+    .filter((c) => c.kind === "watch" && isEpisode(c) && c.watched_at && !isUnknownWatchedAt(c.watched_at))
     .map((c) => Date.parse(c.watched_at!))
     .filter((t) => !Number.isNaN(t));
   if (!times.length) return null;
@@ -298,7 +300,8 @@ async function requestsFor(
       const add = c.kind === "watch";
       if (trakt) {
         const path = add ? "/sync/history" : "/sync/history/remove";
-        const stamp = add ? { watched_at: c.watched_at } : {};
+        // A watch with no date goes as Trakt's own "unknown" keyword, not as a 1970 date.
+        const stamp = add ? { watched_at: isUnknownWatchedAt(c.watched_at) ? "unknown" : c.watched_at } : {};
         return [{ path, body: c.media_type === "movie" ? { movies: [{ ids, ...stamp }] } : episodeBody(stamp) }];
       }
       const path = add ? "/sync/tracking" : "/sync/tracking/remove/all";

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { WatchDialog, type WatchDialogResult } from "@/components/media/WatchDialog";
 import { addPlay, listPlays, removeAllPlays, removePlay } from "@/lib/plays.functions";
-import { formatDateTimeAU } from "@/lib/utils";
+import { watchedOnAU } from "@/lib/utils";
 
 type Props = {
   open: boolean;
@@ -136,7 +136,7 @@ export function PlaysSheet(props: Props) {
                       {wholeShow && p.season_number != null && p.episode_number != null
                         ? `S${p.season_number} · E${p.episode_number} · `
                         : ""}
-                      Watched {formatDateTimeAU(p.watched_at)}
+                      {watchedOnAU(p.watched_at)}
                     </div>
                     {typeof p.rating === "number" && (
                       <div className="text-xs text-muted-foreground inline-flex items-center gap-1 mt-0.5">

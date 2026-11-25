@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, ChevronUp, History, MessageSquare } from "lucide-react";
 import { episodeQuery, seasonQuery, tvQuery } from "@/lib/tv-query";
 import { formatRuntime, img, type CastMember, type CrewMember } from "@/lib/tmdb";
-import { formatDateAULong, formatDateTimeAU } from "@/lib/utils";
+import { formatDateAULong, watchedOnAU } from "@/lib/utils";
 import { DetailBackdrop } from "@/components/media/DetailHero";
 import { RatingsBar } from "@/components/media/RatingsBar";
 import { CommentsList, useComments } from "@/components/media/CommentsDialog";
 import { useEpisodeWatching } from "@/hooks/use-episode-watching";
 import { markHeroPoster } from "@/lib/peek";
+import { getEpisodeWiki } from "@/lib/tmdb.functions";
+import wikipediaIcon from "@/assets/links/wikipedia.svg";
 
 export const Route = createFileRoute("/tv/$id/season/$seasonNumber_/episode/$episodeNumber")({
   // Like a movie page: drawn in full on the server when opened directly, but a tap inside the app changes the page
@@ -41,7 +43,34 @@ function People({ people }: { people: { id: number; name: string }[] }) {
   );
 }
 
-const uniqueById = <T extends { id: number }>(list: T[]) => list.filter((x, i) => list.findIndex((y) => y.id === x.id) === i);
+/**
+ * Opens the episode on English Wikipedia in a new tab: its own article when it has one, else its season's episode
+ * list, else the show's article (the label says which). Until the answer arrives, and when there is none, it is a
+ * Wikipedia search for the episode and show names.
+ */
+function WikiButton({ tvId, sn, en, search }: { tvId: number; sn: number; en: number; search: string }) {
+  const { data: link } = useQuery({
+    queryKey: ["episode-wiki", tvId, sn, en],
+    queryFn: () => getEpisodeWiki({ data: { id: tvId, seasonNumber: sn, episodeNumber: en } }),
+    staleTime: Infinity,
+  });
+  const href = link?.url ?? `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(search)}`;
+  const label =
+    link?.kind === "season" ? "Season on Wikipedia" : link?.kind === "show" ? "Show on Wikipedia" : link === null ? "Search Wikipedia" : "Wikipedia";
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-border pl-1 pr-3 py-1 text-xs font-medium text-foreground hover:border-primary/50"
+    >
+      <img src={wikipediaIcon} alt="" className="size-5 rounded-full" />
+      {label}
+    </a>
+  );
+}
+
+const uniqueById =<T extends { id: number }>(list: T[]) => list.filter((x, i) => list.findIndex((y) => y.id === x.id) === i);
 
 function EpisodePage() {
   const { id, seasonNumber, episodeNumber } = Route.useParams();
@@ -124,6 +153,9 @@ function EpisodePage() {
           {writers.length > 0 && (
             <p className="text-xs md:text-sm text-muted-foreground">Written by <People people={writers} /></p>
           )}
+          <div className="pt-1">
+            <WikiButton tvId={tvId} sn={sn} en={en} search={[ep?.name, show?.name].filter(Boolean).join(" ")} />
+          </div>
         </div>
         <div className="px-4 md:px-10 mt-4 md:mt-6 space-y-4">
           <RatingsBar
@@ -149,7 +181,7 @@ function EpisodePage() {
                 {watched ? "Watched" : "Mark as watched"}
               </button>
               {watched && watchedAt && (
-                <p className="text-center text-xs text-muted-foreground">Watched {formatDateTimeAU(watchedAt)}</p>
+                <p className="text-center text-xs text-muted-foreground">{watchedOnAU(watchedAt)}</p>
               )}
             </div>
           )}

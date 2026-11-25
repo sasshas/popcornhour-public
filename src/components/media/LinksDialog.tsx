@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { FloatingSheet } from "@/components/ui/floating-sheet";
 import { createLocalFlag } from "@/hooks/use-local-flag";
-import { useRegion } from "@/hooks/use-region";
+import { useJustWatchUrl } from "@/hooks/use-justwatch";
 import googleIcon from "@/assets/links/google.svg";
 import traktIcon from "@/assets/links/trakt.svg";
 import letterboxdIcon from "@/assets/links/letterboxd.svg";
@@ -43,10 +43,8 @@ export function LinksDialog({ open, onOpenChange, title, tmdbId, imdbId, homepag
   const q = encodeURIComponent(title);
   const tv = mediaType === "tv";
   const tmdbUrl = `https://www.themoviedb.org/${tv ? "tv" : "movie"}/${tmdbId}`;
-  // JustWatch has no link by IMDb or TMDb id, so this is its search for the name, in the streaming country
-  // chosen under "Where to watch" (JustWatch spells the UK "uk", every other country its usual code).
-  const region = useRegion() ?? "US";
-  const jwCountry = region === "GB" ? "uk" : region.toLowerCase();
+  // The title's own JustWatch page in the streaming country chosen under "Where to watch" (a search until found).
+  const justWatchUrl = useJustWatchUrl({ mediaType, tmdbId, imdbId: imdbId ?? null, title });
   const links: { label: string; href: string }[] = [
     ...(homepage ? [{ label: "Website", href: homepage }] : []),
     { label: "Google", href: `https://www.google.com/search?q=${q}+${tv ? "tv+series" : "movie"}` },
@@ -55,7 +53,7 @@ export function LinksDialog({ open, onOpenChange, title, tmdbId, imdbId, homepag
     { label: "TMDb", href: tmdbUrl },
     // Letterboxd only has films.
     ...(imdbId && !tv ? [{ label: "Letterboxd", href: `https://letterboxd.com/imdb/${imdbId}/` }] : []),
-    { label: "JustWatch", href: `https://www.justwatch.com/${jwCountry}/search?q=${q}` },
+    { label: "JustWatch", href: justWatchUrl },
     { label: "Wikipedia", href: `https://en.wikipedia.org/w/index.php?search=${q}` },
   ];
 

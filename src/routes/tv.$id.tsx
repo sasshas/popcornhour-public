@@ -225,7 +225,7 @@ function TVPage() {
 
       <WhatPeopleSay imdbId={imdbId} mediaType="tv" />
 
-      <WatchProviders mediaType="tv" tmdbId={m.id} />
+      <WatchProviders mediaType="tv" tmdbId={m.id} title={m.name || "Untitled"} imdbId={imdbId} />
 
       <ParentsGuide imdbId={imdbId} />
 

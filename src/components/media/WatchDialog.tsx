@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, Clock } from "lucide-react";
 import { RatingPicker } from "@/components/media/RatingPicker";
+import { UNKNOWN_WATCHED_AT } from "@/lib/watched-date";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,9 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
   const [date, setDate] = useState(init.date);
   const [time, setTime] = useState(init.time);
   const [rating, setRating] = useState<number | null>(initialRating ?? null);
+  // "Unknown date": watched, but not sure when. The date and time boxes are greyed out while it is chosen; touching
+  // them, or another pill, picks a real date again.
+  const [unknown, setUnknown] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -52,6 +56,7 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
       setDate(i.date);
       setTime(i.time);
       setRating(initialRating ?? null);
+      setUnknown(false);
     }
   }, [open, initialRating]);
 
@@ -71,14 +76,18 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
       const i = toLocalInput(d);
       setDate(i.date);
       setTime(i.time);
+      setUnknown(false);
     }
   };
 
   const submit = () => {
-    const d = fromLocalInput(date, time);
-    onValidate({ watchedAt: d.toISOString(), rating });
+    const watchedAt = unknown ? UNKNOWN_WATCHED_AT : fromLocalInput(date, time).toISOString();
+    onValidate({ watchedAt, rating });
     onOpenChange(false);
   };
+
+  const pill = "rounded-md border px-3 py-1.5 text-sm transition";
+  const pillIdle = `${pill} border-border bg-surface hover:border-primary/50`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,7 +98,7 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
         <div className="space-y-5 pt-2">
           <RatingPicker value={rating} onChange={setRating} allowClear tone="gold" />
 
-          <div className="space-y-3">
+          <div className={`space-y-3 transition-opacity ${unknown ? "opacity-40" : ""}`}>
             <label className="flex items-center gap-3">
               <Calendar className="size-5 text-foreground" />
               <div className="flex-1">
@@ -97,7 +106,8 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
                 <input
                   type="date"
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  onChange={(e) => { setDate(e.target.value); setUnknown(false); }}
+                  onFocus={() => setUnknown(false)}
                   className="bg-transparent w-full text-lg outline-none text-foreground [color-scheme:dark]"
                 />
               </div>
@@ -109,43 +119,45 @@ export function WatchDialog({ open, onOpenChange, title, initialRating, releaseD
                 <input
                   type="time"
                   value={time}
-                  onChange={(e) => setTime(e.target.value)}
+                  onChange={(e) => { setTime(e.target.value); setUnknown(false); }}
+                  onFocus={() => setUnknown(false)}
                   className="bg-transparent w-full text-lg outline-none text-foreground [color-scheme:dark]"
                 />
               </div>
             </label>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
                 const i = toLocalInput(new Date());
                 setDate(i.date);
                 setTime(i.time);
+                setUnknown(false);
               }}
-              className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:border-primary/50"
+              className={pillIdle}
             >
               Now
             </button>
             {releaseDay && (
-              <button
-                type="button"
-                onClick={() => pickDay(releaseDay)}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:border-primary/50"
-              >
+              <button type="button" onClick={() => pickDay(releaseDay)} className={pillIdle}>
                 Release date
               </button>
             )}
             {streamingDay && (
-              <button
-                type="button"
-                onClick={() => pickDay(streamingDay)}
-                className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm hover:border-primary/50"
-              >
+              <button type="button" onClick={() => pickDay(streamingDay)} className={pillIdle}>
                 Streaming date
               </button>
             )}
+            <button
+              type="button"
+              aria-pressed={unknown}
+              onClick={() => setUnknown((u) => !u)}
+              className={unknown ? `${pill} border-primary bg-primary/15 text-primary` : pillIdle}
+            >
+              Unknown date
+            </button>
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">

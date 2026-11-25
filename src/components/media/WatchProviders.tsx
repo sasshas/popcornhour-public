@@ -15,17 +15,25 @@ import { regionName as nameOf } from "@/lib/region";
 import { CountryRadioGroup } from "@/components/media/CountryRadioGroup";
 import { useRegion } from "@/hooks/use-region";
 import { useMenuEdgeGap } from "@/hooks/use-fullscreen-mode";
+import { useJustWatchUrl } from "@/hooks/use-justwatch";
+import justwatchIcon from "@/assets/links/justwatch.svg";
 
 /** TMDB logo sizes (name, width in px) offered to the browser through srcset. */
 const LOGO_SIZES = [["w45", 45], ["w92", 92], ["w154", 154]] as const;
 
 type Provider = { provider_id: number; provider_name: string; logo_path: string | null };
 
-export function WatchProviders({ mediaType, tmdbId }: { mediaType: "movie" | "tv"; tmdbId: number }) {
+export function WatchProviders({ mediaType, tmdbId, title, imdbId }: {
+  mediaType: "movie" | "tv";
+  tmdbId: number;
+  title: string;
+  imdbId: string | null;
+}) {
   const region = useRegion() ?? "US"; // shared setting: also changed from the Library's Filter menu
   const menuEdgeGap = useMenuEdgeGap(); // keeps the country menu clear of the status bar in fullscreen
 
   const regionName = nameOf(region);
+  const justWatchUrl = useJustWatchUrl({ mediaType, tmdbId, imdbId, title });
 
   const fetchProviders = useServerFn(getWatchProviders);
   const { data, isLoading } = useQuery({
@@ -113,6 +121,19 @@ export function WatchProviders({ mediaType, tmdbId }: { mediaType: "movie" | "tv
           </span>
         </p>
       )}
+
+      {/* This title's own page on JustWatch in the chosen country (a JustWatch search until it is found). */}
+      <div className="mt-3">
+        <a
+          href={justWatchUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-border pl-1 pr-3 py-1 text-xs font-medium text-foreground hover:border-primary/50"
+        >
+          <img src={justwatchIcon} alt="" className="size-5 rounded-full" />
+          JustWatch
+        </a>
+      </div>
     </section>
   );
 }

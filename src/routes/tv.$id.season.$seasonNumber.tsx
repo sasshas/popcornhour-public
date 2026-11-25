@@ -5,7 +5,7 @@ import { DetailBackdrop, DetailPoster } from "@/components/media/DetailHero";
 import { formatRuntime, img } from "@/lib/tmdb";
 import { Check, Star } from "lucide-react";
 import { useMemo } from "react";
-import { formatDateAULong, formatDateTimeAU } from "@/lib/utils";
+import { formatDateAULong, watchedOnAU } from "@/lib/utils";
 import { ReadMore } from "@/components/media/ReadMore";
 import { WatchedBar } from "@/components/media/WatchedBar";
 import { useEpisodeWatching } from "@/hooks/use-episode-watching";
@@ -128,7 +128,7 @@ function SeasonPage() {
                     </p>
                     {ep.overview && <p className="mt-1.5 text-xs md:text-sm text-muted-foreground line-clamp-3">{ep.overview}</p>}
                     {watched && watchedAtMap.get(ep.episode_number) && (
-                      <p className="text-xs text-primary mt-1.5">Watched {formatDateTimeAU(watchedAtMap.get(ep.episode_number)!)}</p>
+                      <p className="text-xs text-primary mt-1.5">{watchedOnAU(watchedAtMap.get(ep.episode_number)!)}</p>
                     )}
                   </div>
                 </Link>

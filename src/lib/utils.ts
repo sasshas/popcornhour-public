@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { isUnknownWatchedAt } from "@/lib/watched-date";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -21,10 +22,16 @@ const MONTHS_FULL = [
 ];
 export function formatDateTimeAU(input?: string | Date | null): string {
   if (!input) return "";
+  if (isUnknownWatchedAt(input)) return "Unknown date";
   const d = typeof input === "string" ? new Date(input) : input;
   if (isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** "Watched 11 November 2026, 10:35", or "Watched, date unknown" for a watch logged with no date. */
+export function watchedOnAU(input?: string | Date | null): string {
+  return isUnknownWatchedAt(input) ? "Watched, date unknown" : `Watched ${formatDateTimeAU(input)}`;
 }
 
 /** The everyday English name for a language or country code ("en" -> "English", "US" -> "United States"). */

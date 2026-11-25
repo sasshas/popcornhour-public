@@ -876,6 +876,49 @@ export const getPersonWiki = createServerFn({ method: "GET" })
     return (await getPersonWikiUrl(data.wikidataId)) ?? null;
   });
 
+/**
+ * Where an episode's Wikipedia button goes: its own article, else its season's, else the show's (null: none has
+ * one, or Wikidata or TMDB couldn't be reached). See src/server/wiki-episode.server.ts.
+ */
+export const getEpisodeWiki = createServerFn({ method: "GET" })
+  .middleware([requireUser])
+  .inputValidator((d: unknown) =>
+    z.object({
+      id: z.number().int().positive(),
+      seasonNumber: z.number().int().min(0),
+      episodeNumber: z.number().int().min(0),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { getEpisodeWikiLink } = await import("@/server/wiki-episode.server");
+    const show = `/tv/${data.id}`;
+    const season = `${show}/season/${data.seasonNumber}`;
+    const episode = `${season}/episode/${data.episodeNumber}`;
+    const ids = () =>
+      Promise.all([episode, season, show].map((p) => tmdb<{ wikidata_id?: string | null }>(`${p}/external_ids`).then((r) => r.wikidata_id)));
+    return (await getEpisodeWikiLink(data.id, data.seasonNumber, data.episodeNumber, ids)) ?? null;
+  });
+
+/** A title's own JustWatch address in a country (null: none found, or JustWatch couldn't be reached). */
+export const getJustWatchLink = createServerFn({ method: "GET" })
+  .middleware([requireUser])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        mediaType: z.enum(["movie", "tv"]),
+        id: z.number().int().positive(),
+        imdbId: z.string().regex(/^tt\d+$/).nullable(),
+        titles: z.array(z.string().max(300)).min(1).max(2),
+        country: z.string().regex(/^[A-Z]{2}$/),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { getJustWatchPath } = await import("@/server/justwatch.server");
+    const path = await getJustWatchPath(data.mediaType, data.id, data.imdbId, data.titles, data.country);
+    return path ? `https://www.justwatch.com${path}` : null;
+  });
+
 type ProvidersResponse = { results: Record<string, ProviderRegion> };
 type ReleaseDatesResponse = {
   results: {
@@ -992,13 +1035,32 @@ export const getTmdbScores = createServerFn({ method: "POST" })
   });
 
 const LAST_AIRED_TTL_MS = 6 * 60 * 60 * 1000;
+const LAST_AIRED_SOON_TTL_MS = 60 * 60 * 1000;
+
+/** What is cached per show. Entries saved before `nextAir` was kept are a bare `lastAired` (string or null). */
+type LastAiredEntry = { lastAired: string | null; nextAir: string | null };
+const readLastAired = (v: LastAiredEntry | string | null): LastAiredEntry =>
+  v !== null && typeof v === "object" ? v : { lastAired: v, nextAir: null };
+
+/**
+ * Does the show's next episode air today? TMDB gives the US day, which can be a day behind or ahead of Canberra's,
+ * so the day before and after count too.
+ */
+function airsAroundToday(nextAir: string | null, now = Date.now()): boolean {
+  if (!nextAir) return false;
+  const today = Date.parse(new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(now));
+  const day = Date.parse(nextAir);
+  return !Number.isNaN(day) && Math.abs(day - today) <= 24 * 60 * 60 * 1000;
+}
 
 /**
  * When each show's most recent episode aired, for the Library's "Recently aired" sort. TMDB names the episode (its
  * `last_episode_to_air`) but only knows the day; Trakt has the exact time it went out (`first_aired`, UTC), so that is
  * used when Trakt is set up on this server and knows the show (looked up by its IMDb id). Otherwise the TMDB day is
  * given as "YYYY-MM-DD". `lastAired` is null when no episode has aired yet.
- * Cached for 6 hours (cache key `lastaired:tv:<id>`); a show whose TMDB lookup fails returns null and is not cached.
+ * Cached for 6 hours (cache key `lastaired:tv:<id>`), but only for an hour when the show's next episode airs today,
+ * so a show that has just come out moves to the top within the hour. A show whose TMDB lookup fails returns null and
+ * is not cached.
  */
 export const getShowsLastAired = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -1007,7 +1069,10 @@ export const getShowsLastAired = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { getCachedMany, setCachedMany } = await import("@/server/tmdb-cache.server");
     const keyOf = (id: number) => `lastaired:tv:${id}`;
-    const cached = getCachedMany<string | null>(data.ids.map(keyOf), LAST_AIRED_TTL_MS);
+    // An entry from before `nextAir` was kept that says nothing has aired is treated as airing soon (it may be).
+    const cached = getCachedMany<LastAiredEntry | string | null>(data.ids.map(keyOf), (v) =>
+      v === null || airsAroundToday(readLastAired(v).nextAir) ? LAST_AIRED_SOON_TTL_MS : LAST_AIRED_TTL_MS,
+    );
     let trakt: Record<string, string> | null = null;
     try {
       const { traktHeaders } = await import("@/lib/trakt.server");
@@ -1015,19 +1080,24 @@ export const getShowsLastAired = createServerFn({ method: "POST" })
     } catch {
       trakt = null; // Trakt not set up: TMDB days only
     }
-    const fetched: [string, string | null][] = [];
+    const fetched: [string, LastAiredEntry][] = [];
+    const isDay = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
     const out = await mapPool(data.ids, 8, async (tmdbId) => {
       const key = keyOf(tmdbId);
-      if (cached.has(key)) return { tmdbId, lastAired: cached.get(key)! };
+      if (cached.has(key)) return { tmdbId, lastAired: readLastAired(cached.get(key)!).lastAired };
       let day: string | null;
+      let nextAir: string | null;
       let imdbId: string | null;
       try {
         const res = await tmdb<{
           last_episode_to_air?: { air_date?: string | null } | null;
+          next_episode_to_air?: { air_date?: string | null } | null;
           external_ids?: { imdb_id?: string | null };
         }>(`/tv/${tmdbId}`, { append_to_response: "external_ids" });
         const d = res.last_episode_to_air?.air_date;
-        day = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+        day = isDay(d) ? d : null;
+        const n = res.next_episode_to_air?.air_date;
+        nextAir = isDay(n) ? n : null;
         const imdb = res.external_ids?.imdb_id;
         imdbId = typeof imdb === "string" && /^tt\d+$/.test(imdb) ? imdb : null;
       } catch {
@@ -1048,7 +1118,7 @@ export const getShowsLastAired = createServerFn({ method: "POST" })
           // Trakt did not answer: keep the TMDB day
         }
       }
-      fetched.push([key, lastAired]);
+      fetched.push([key, { lastAired, nextAir }]);
       return { tmdbId, lastAired };
     });
     setCachedMany(fetched);

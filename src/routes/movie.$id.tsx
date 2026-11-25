@@ -238,7 +238,7 @@ function MoviePage() {
 
       <WhatPeopleSay imdbId={m.imdb_id} />
 
-      <WatchProviders mediaType="movie" tmdbId={m.id} />
+      <WatchProviders mediaType="movie" tmdbId={m.id} title={m.title || "Untitled"} imdbId={m.imdb_id ?? null} />
 
       <ParentsGuide imdbId={m.imdb_id} />
 

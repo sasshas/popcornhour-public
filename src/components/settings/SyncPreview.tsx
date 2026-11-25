@@ -8,6 +8,7 @@ import {
 } from "@/lib/sync.functions";
 import { getMovie, getTV } from "@/lib/tmdb.functions";
 import { formatDateTimeAU } from "@/lib/utils";
+import { isUnknownWatchedAt } from "@/lib/watched-date";
 
 type StreamEvent = {
   type: string; phase?: string; current?: number; total?: number; summary?: Record<string, number>; message?: string;
@@ -18,9 +19,10 @@ const NAME: Record<SyncService, string> = { trakt: "Trakt", wetrakr: "WeTrakr" }
 /** What one waiting change will do on the service, in plain words. */
 function describe(i: PreviewItem): string {
   const ep = i.season != null && i.episode != null ? `S${i.season} E${i.episode}` : null;
-  if (i.kind === "watch") return `${ep ? `${ep} watched` : "Watched"} ${formatDateTimeAU(i.watchedAt)}`;
+  const noDate = isUnknownWatchedAt(i.watchedAt);
+  if (i.kind === "watch") return `${ep ? `${ep} watched` : "Watched"}${noDate ? ", date unknown" : ` ${formatDateTimeAU(i.watchedAt)}`}`;
   if (i.kind === "unwatch") return ep ? `${ep}: remove from watched` : "Remove from watched";
-  if (i.kind === "unplay") return `${ep ? `${ep}: remove` : "Remove"} the play on ${formatDateTimeAU(i.watchedAt)}`;
+  if (i.kind === "unplay") return `${ep ? `${ep}: remove` : "Remove"} ${noDate ? "the play with no date" : `the play on ${formatDateTimeAU(i.watchedAt)}`}`;
   if (i.kind === "watchlist") return i.value === 1 ? "Add to watchlist" : "Remove from watchlist";
   if (i.kind === "favorite") return i.value === 1 ? "Add to favourites" : "Remove from favourites";
   if (i.kind === "status") {

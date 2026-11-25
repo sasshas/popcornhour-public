@@ -676,7 +676,7 @@ function DetailsSheet({ entry, onClose, onLeave }: { entry: WtsEntry | null; onC
     : [];
 
   return (
-    <FloatingSheet open={!!entry} onOpenChange={(o) => { if (!o) onClose(); }} title={e?.title ?? ""} slides={SHEET_SLIDES}>
+    <FloatingSheet open={!!entry} onOpenChange={(o) => { if (!o) onClose(); }} title={e?.title ?? ""} slides={SHEET_SLIDES} swipeToClose>
       {e && (
         <div className="max-h-[65dvh] space-y-4 overflow-y-auto">
           <div className="flex gap-4">
